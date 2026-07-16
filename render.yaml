@@ -1,0 +1,28 @@
+# TradeMind AI — Render Blueprint (FastAPI + Neon)
+# https://dashboard.render.com/blueprints
+#
+# 1. Create a Neon Postgres database and copy DATABASE_URL.
+# 2. Deploy this web service.
+# 3. From your PC, run: TRADEMIND_API_BASE=https://YOUR-API.onrender.com/api/v1 python scripts/bootstrap_market.py
+# 4. Deploy Terminal + Studio on Vercel with VITE_API_BASE pointing at this API.
+
+services:
+  - type: web
+    name: trademind-api
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "bash scripts/start_api.sh"
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_FORMAT
+        value: text
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+        # After Vercel: https://YOUR-TERMINAL.vercel.app,https://YOUR-STUDIO.vercel.app
