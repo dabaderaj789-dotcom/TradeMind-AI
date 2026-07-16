@@ -2,7 +2,7 @@
 # Migrate Neon/Postgres then start FastAPI (Railway / Render).
 set -euo pipefail
 
-echo "[trademind] alembic upgrade head…"
+echo "[trademind] alembic upgrade head"
 alembic upgrade head
 
 PORT="${PORT:-8000}"
