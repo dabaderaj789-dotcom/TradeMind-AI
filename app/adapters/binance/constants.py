@@ -1,6 +1,10 @@
 """Binance API constants."""
 
-BASE_URL = "https://api.binance.com"
+import os
+
+# Public market-data host (works from more regions than api.binance.com).
+# Override with BINANCE_BASE_URL if needed.
+BASE_URL = os.environ.get("BINANCE_BASE_URL", "https://data-api.binance.vision").rstrip("/")
 EXCHANGE_CODE = "binance"
 MAX_KLINES_PER_REQUEST = 1000
 DEFAULT_TIMEOUT = 30.0
