@@ -1,6 +1,8 @@
 """MACD plugin."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -15,7 +17,7 @@ class MACDParameters(BaseModel):
     signal_period: int = Field(default=9, ge=2, le=500)
 
     @model_validator(mode="after")
-    def validate_periods(self) -> MACDParameters:
+    def validate_periods(self) -> Self:
         if self.fast_period >= self.slow_period:
             raise ValueError("fast_period must be less than slow_period")
         return self
