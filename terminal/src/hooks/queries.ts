@@ -32,7 +32,7 @@ export function useSymbolSearch(search: string, exchange: string, enabled = true
         {
           search,
           exchange,
-          pageSize: search.trim() ? 80 : 200,
+          pageSize: search.trim() ? 100 : 500,
         },
         signal,
       ),

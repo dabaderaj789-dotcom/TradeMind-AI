@@ -25,6 +25,7 @@ import {
   selectCurrentStructure,
   selectCurrentSweeps,
   selectFreshFvgs,
+  selectNearestLevels,
   selectTradePlan,
 } from "../../lib/chartQuality";
 import { useSettings } from "../../store/settings";
@@ -54,6 +55,8 @@ export interface OverlayData {
   setups?: TradeSetup[];
   annotations?: ChartAnnotation[];
   predictive?: PredictivePlan | null;
+  /** Recent HH/HL/LH/LL swings from market_structure analysis. */
+  swings?: { time: string; type: string }[];
 }
 
 interface Props {
@@ -240,6 +243,22 @@ export function TerminalChart({ candles, enabled, data }: Props) {
       }
     }
 
+    // Active structure swings only (last few HH/HL/LH/LL) — not full history.
+    if (enabled.marketStructure && data.swings?.length) {
+      const recent = showHistorical ? data.swings.slice(-8) : data.swings.slice(-4);
+      for (const s of recent) {
+        const high = s.type === "HH" || s.type === "LH";
+        markers.push({
+          time: nearestCandleTime(bars, s.time),
+          position: high ? "aboveBar" : "belowBar",
+          color: s.type.startsWith("H") ? "#86efac" : "#fca5a5",
+          shape: "square",
+          text: s.type,
+          priority: 25,
+        });
+      }
+    }
+
     if (enabled.tradeSetups) {
       for (const a of selectAnnotations(data.annotations)) {
         const time = nearestCandleTime(bars, a.time);
@@ -298,13 +317,13 @@ export function TerminalChart({ candles, enabled, data }: Props) {
       );
     };
 
-    if (enabled.marketStructure && showHistorical) {
-      for (const s of (data.levels?.support_levels ?? []).slice(0, 2)) {
-        add(num(s.price), "rgba(34,197,94,0.7)", "Support", LineStyle.Dashed);
-      }
-      for (const r of (data.levels?.resistance_levels ?? []).slice(0, 2)) {
-        add(num(r.price), "rgba(239,68,68,0.7)", "Resistance", LineStyle.Dashed);
-      }
+    if (enabled.marketStructure) {
+      const lastPx =
+        data.quote?.current_price ??
+        (candlesRef.current.length ? num(candlesRef.current[candlesRef.current.length - 1].close) : null);
+      const { support, resistance } = selectNearestLevels(data.levels, lastPx);
+      if (support != null) add(support, "rgba(34,197,94,0.75)", "Support", LineStyle.Dashed, 2);
+      if (resistance != null) add(resistance, "rgba(239,68,68,0.75)", "Resistance", LineStyle.Dashed, 2);
     }
 
     if (enabled.orderBlocks) {
@@ -351,21 +370,23 @@ export function TerminalChart({ candles, enabled, data }: Props) {
     }
 
     if (enabled.tradeSetups) {
-      const { predictive: plan, setup: top } = selectTradePlan(data.predictive, data.setups);
+      const { predictive: plan } = selectTradePlan(data.predictive, data.setups);
+      // WAIT / no actionable plan → draw nothing.
       if (plan) {
         const buy = plan.direction === "buy";
-        add(plan.entryHigh, buy ? "rgba(34,197,94,0.85)" : "rgba(239,68,68,0.85)", buy ? "Buy Zone" : "Sell Zone", LineStyle.Solid, 2);
+        add(
+          plan.entryHigh,
+          buy ? "rgba(34,197,94,0.85)" : "rgba(239,68,68,0.85)",
+          buy ? "Buy Zone" : "Sell Zone",
+          LineStyle.Solid,
+          2,
+        );
         add(plan.entryLow, buy ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)", "", LineStyle.Dotted, 1);
         add(plan.entry, "#4f7cff", "Entry", LineStyle.Solid, 2);
-        add(plan.stop, "#ef4444", "SL", LineStyle.Solid, 2);
+        add(plan.stop, "#ef4444", "Stop", LineStyle.Solid, 2);
         add(plan.target1, "rgba(56,189,248,0.95)", "TP1", LineStyle.Solid, 2);
-        if (plan.target2 != null) add(plan.target2, "rgba(56,189,248,0.65)", "TP2", LineStyle.Dashed, 1);
-      } else if (top) {
-        add(num(top.entry_zone.low), "#4f7cff", "Entry", LineStyle.Solid, 2);
-        add(num(top.entry_zone.high), "rgba(79,124,255,0.45)", "Zone", LineStyle.Dotted);
-        add(num(top.stop_loss_zone.low), "#ef4444", "SL", LineStyle.Solid, 2);
-        const t1 = top.target_zones[0];
-        if (t1) add(num(t1.low), "#22c55e", "TP1", LineStyle.Solid, 2);
+        if (plan.target2 != null) add(plan.target2, "rgba(56,189,248,0.7)", "TP2", LineStyle.Dashed, 1);
+        if (plan.target3 != null) add(plan.target3, "rgba(56,189,248,0.45)", "TP3", LineStyle.Dotted, 1);
       }
     }
   }, [enabled, data, showHistorical]);
@@ -407,6 +428,18 @@ function PlanHud({ plan }: { plan: PredictivePlan }) {
             <>
               <span className="text-faint">TP2</span>
               <span className="text-info text-right">{plan.target2}</span>
+            </>
+          )}
+          {plan.target3 != null && (
+            <>
+              <span className="text-faint">TP3</span>
+              <span className="text-info text-right">{plan.target3}</span>
+            </>
+          )}
+          {plan.riskReward != null && (
+            <>
+              <span className="text-faint">R:R</span>
+              <span className="text-brand text-right">1:{plan.riskReward.toFixed(2)}</span>
             </>
           )}
         </div>

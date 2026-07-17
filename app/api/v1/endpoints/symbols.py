@@ -14,7 +14,7 @@ async def list_symbols(
     exchange_code: str | None = Query(None, description="Filter by exchange code"),
     search: str | None = Query(None, description="Search symbol code or name"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=500),
     active_only: bool = Query(True),
 ) -> PaginatedSymbolResponse:
     """Return paginated symbols, optionally filtered by exchange or search query."""

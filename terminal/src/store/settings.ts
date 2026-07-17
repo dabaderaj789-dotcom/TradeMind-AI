@@ -71,12 +71,26 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "trademind.settings",
-      version: 4,
-      migrate: (persisted) => {
+      version: 5,
+      migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
+        let overlays = { ...DEFAULT_OVERLAYS, ...(p.overlays ?? {}) };
+        // v5: institutional chart clarity defaults (S/R + sweeps on; clutter off elsewhere).
+        if (fromVersion < 5) {
+          overlays = {
+            ...overlays,
+            marketStructure: true,
+            sweeps: true,
+            bos: true,
+            choch: true,
+            orderBlocks: true,
+            fvg: true,
+            tradeSetups: true,
+          };
+        }
         return {
           ...p,
-          overlays: { ...DEFAULT_OVERLAYS, ...(p.overlays ?? {}) },
+          overlays,
           showHistoricalOverlays: p.showHistoricalOverlays ?? false,
           tvCompareMode: p.tvCompareMode ?? false,
           scannerFilters: { ...DEFAULT_FILTERS, ...(p.scannerFilters ?? {}) },

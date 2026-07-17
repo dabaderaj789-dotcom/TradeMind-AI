@@ -57,7 +57,19 @@ export function TerminalPage() {
   const ema = useAnalysis(symbolId, tf, "ema", overlays.ema);
   const sma = useAnalysis(symbolId, tf, "sma", overlays.sma);
   const vwap = useAnalysis(symbolId, tf, "vwap", overlays.vwap);
+  const ms = useAnalysis(symbolId, tf, "market_structure", overlays.marketStructure || overlays.bos);
   const { decision, annotations, predictive, isLoading, trend, plan } = useDecision(symbolId, tf);
+
+  const swings = useMemo(() => {
+    const items = ms.data?.items ?? [];
+    return items
+      .filter((b) => b.values.swing_type)
+      .slice(-8)
+      .map((b) => ({
+        time: b.open_time,
+        type: String(b.values.swing_type),
+      }));
+  }, [ms.data]);
 
   const overlayData = useMemo<OverlayData>(
     () => ({
@@ -73,8 +85,9 @@ export function TerminalPage() {
       setups: setups.data?.items,
       annotations,
       predictive,
+      swings,
     }),
-    [ema.data, sma.data, vwap.data, quoteQ.data, ob.data, fvg.data, sweeps.data, levels.data, events.data, setups.data, annotations, predictive],
+    [ema.data, sma.data, vwap.data, quoteQ.data, ob.data, fvg.data, sweeps.data, levels.data, events.data, setups.data, annotations, predictive, swings],
   );
 
   const quote = quoteQ.data;

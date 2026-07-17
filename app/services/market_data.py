@@ -330,6 +330,10 @@ class MarketDataService:
 
     @staticmethod
     def _to_symbol_response(symbol) -> SymbolResponse:
+        meta = getattr(symbol, "metadata_", None) or getattr(symbol, "metadata", None) or {}
+        instrument = None
+        if isinstance(meta, dict):
+            instrument = meta.get("instrument")
         return SymbolResponse(
             id=symbol.id,
             exchange_code=symbol.exchange.code,
@@ -343,6 +347,7 @@ class MarketDataService:
             tick_size=symbol.tick_size,
             lot_size=symbol.lot_size,
             is_active=symbol.is_active,
+            instrument=instrument,
         )
 
 

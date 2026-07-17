@@ -32,6 +32,8 @@ class SymbolResponse(BaseSchema):
     tick_size: Decimal
     lot_size: int
     is_active: bool
+    # Instrument class from adapter metadata (index, equity, etf, futures, sector_index).
+    instrument: str | None = None
 
 
 class CandleResponse(BaseSchema):

@@ -68,11 +68,25 @@ export function MarketBrowser() {
     india: true,
     crypto: true,
   });
-  const [focus, setFocus] = useState<Focus>({ kind: "leaf", id: "crypto.spot" });
+  const [focus, setFocus] = useState<Focus>({ kind: "leaf", id: "india.indices" });
 
-  const { data, isLoading, isError, refetch, isFetching } = useSymbolSearch("", "", true);
+  const nseQ = useSymbolSearch("", "nse", true);
+  const binanceQ = useSymbolSearch("", "binance", true);
+  const isLoading = nseQ.isLoading || binanceQ.isLoading;
+  const isError = nseQ.isError && binanceQ.isError;
+  const isFetching = nseQ.isFetching || binanceQ.isFetching;
+  const refetch = () => {
+    void nseQ.refetch();
+    void binanceQ.refetch();
+  };
 
-  const allSymbols = useMemo(() => (data?.items ?? []) as Symbol[], [data?.items]);
+  const allSymbols = useMemo(() => {
+    const map = new Map<string, Symbol>();
+    for (const s of [...(nseQ.data?.items ?? []), ...(binanceQ.data?.items ?? [])] as Symbol[]) {
+      map.set(s.id, s);
+    }
+    return Array.from(map.values());
+  }, [nseQ.data?.items, binanceQ.data?.items]);
 
   const counts = useMemo(() => {
     const map = new Map<MarketLeafId | MarketId, number>();

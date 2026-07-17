@@ -1,4 +1,4 @@
-"""Static NSE symbol catalog (indices + Nifty 50 equities)."""
+"""Static NSE symbol catalog (indices, stocks, sector indices, ETFs, index futures)."""
 
 from __future__ import annotations
 
@@ -9,11 +9,43 @@ from app.domain.entities.symbol import Symbol
 from app.domain.enums.market_type import MarketType
 
 # (symbol_code, name, yahoo_ticker, tick_size, lot_size, instrument)
+# instrument: index | sector_index | equity | etf | futures
 _NSE_CATALOG: list[tuple[str, str, str, str, int, str]] = [
+    # ---- Broad indices ----
     ("NIFTY50", "Nifty 50", "^NSEI", "0.05", 25, "index"),
     ("BANKNIFTY", "Nifty Bank", "^NSEBANK", "0.05", 15, "index"),
     ("FINNIFTY", "Nifty Financial Services", "NIFTY_FIN_SERVICE.NS", "0.05", 25, "index"),
+    ("MIDCPNIFTY", "Nifty Midcap Select", "NIFTY_MID_SELECT.NS", "0.05", 50, "index"),
     ("SENSEX", "BSE Sensex", "^BSESN", "0.05", 10, "index"),
+    ("INDIAVIX", "India VIX", "^INDIAVIX", "0.05", 1, "index"),
+    # ---- Sector indices ----
+    ("NIFTYIT", "Nifty IT", "^CNXIT", "0.05", 1, "sector_index"),
+    ("NIFTYPHARMA", "Nifty Pharma", "^CNXPHARMA", "0.05", 1, "sector_index"),
+    ("NIFTYAUTO", "Nifty Auto", "^CNXAUTO", "0.05", 1, "sector_index"),
+    ("NIFTYMETAL", "Nifty Metal", "^CNXMETAL", "0.05", 1, "sector_index"),
+    ("NIFTYFMCG", "Nifty FMCG", "^CNXFMCG", "0.05", 1, "sector_index"),
+    ("NIFTYENERGY", "Nifty Energy", "^CNXENERGY", "0.05", 1, "sector_index"),
+    ("NIFTYREALTY", "Nifty Realty", "^CNXREALTY", "0.05", 1, "sector_index"),
+    ("NIFTYMEDIA", "Nifty Media", "^CNXMEDIA", "0.05", 1, "sector_index"),
+    ("NIFTYPSUBANK", "Nifty PSU Bank", "^CNXPSUBANK", "0.05", 1, "sector_index"),
+    ("NIFTYPVTBANK", "Nifty Private Bank", "NIFTY_PVT_BANK.NS", "0.05", 1, "sector_index"),
+    ("NIFTYINFRA", "Nifty Infrastructure", "^CNXINFRA", "0.05", 1, "sector_index"),
+    ("NIFTYMIDCAP100", "Nifty Midcap 100", "^NSEMDCP50", "0.05", 1, "sector_index"),
+    # ---- Index futures (continuous proxies via Yahoo index feeds) ----
+    ("NIFTYFUT", "Nifty 50 Futures", "^NSEI", "0.05", 25, "futures"),
+    ("BANKNIFTYFUT", "Bank Nifty Futures", "^NSEBANK", "0.05", 15, "futures"),
+    ("FINNIFTYFUT", "Fin Nifty Futures", "NIFTY_FIN_SERVICE.NS", "0.05", 25, "futures"),
+    ("MIDCPNIFTYFUT", "Midcap Nifty Futures", "NIFTY_MID_SELECT.NS", "0.05", 50, "futures"),
+    # ---- Liquid ETFs ----
+    ("NIFTYBEES", "Nippon India ETF Nifty BeES", "NIFTYBEES.NS", "0.01", 1, "etf"),
+    ("BANKBEES", "Nippon India ETF Bank BeES", "BANKBEES.NS", "0.01", 1, "etf"),
+    ("ITBEES", "Nippon India ETF IT BeES", "ITBEES.NS", "0.01", 1, "etf"),
+    ("GOLDBEES", "Nippon India ETF Gold BeES", "GOLDBEES.NS", "0.01", 1, "etf"),
+    ("JUNIORBEES", "Nippon India ETF Junior BeES", "JUNIORBEES.NS", "0.01", 1, "etf"),
+    ("MON100", "Motilal Oswal NASDAQ 100 ETF", "MON100.NS", "0.01", 1, "etf"),
+    ("SETFNIF50", "SBI Nifty 50 ETF", "SETFNIF50.NS", "0.01", 1, "etf"),
+    ("CPSEETF", "CPSE ETF", "CPSEETF.NS", "0.01", 1, "etf"),
+    # ---- Nifty 50 equities ----
     ("RELIANCE", "Reliance Industries", "RELIANCE.NS", "0.05", 1, "equity"),
     ("TCS", "Tata Consultancy Services", "TCS.NS", "0.05", 1, "equity"),
     ("INFY", "Infosys", "INFY.NS", "0.05", 1, "equity"),
@@ -68,12 +100,13 @@ _NSE_CATALOG: list[tuple[str, str, str, str, int, str]] = [
 def build_nse_symbols() -> list[Symbol]:
     out: list[Symbol] = []
     for code, name, yahoo, tick, lot, instrument in _NSE_CATALOG:
+        mt = MarketType.FUTURES if instrument == "futures" else MarketType.EQUITY
         out.append(
             Symbol(
                 symbol_code=code,
                 name=name,
                 exchange_code=EXCHANGE_CODE,
-                market_type=MarketType.EQUITY,
+                market_type=mt,
                 base_asset=code,
                 quote_asset="INR",
                 tick_size=Decimal(tick),
@@ -90,7 +123,6 @@ def yahoo_ticker_for(symbol_code: str) -> str | None:
     for c, _n, yahoo, *_rest in _NSE_CATALOG:
         if c.upper() == code:
             return yahoo
-    # Allow passthrough of Yahoo-style codes
     if code.endswith(".NS") or code.startswith("^"):
         return symbol_code
     return f"{code}.NS"

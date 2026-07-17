@@ -3,14 +3,17 @@ import {
   useAnalysis,
   useFvgs,
   useLevels,
+  useMarketQuote,
   useOrderBlocks,
   useStructureEvents,
   useSweeps,
   useTrend,
 } from "../../hooks/queries";
 import { useDecision } from "../../hooks/useDecision";
-import { directionTone, fmtPct, fmtTime, titleCase, trendLabel } from "../../lib/format";
+import { buildAnalystBrief } from "../../lib/analystBrief";
+import { directionTone, fmtPct, fmtTime, num, titleCase, trendLabel } from "../../lib/format";
 import { Badge, Card, Dot, Skeleton, Stat } from "../common/primitives";
+import { AnalystBriefCard } from "./AnalystBriefCard";
 import { DecisionCard } from "./DecisionCard";
 import { PredictiveSignalCard } from "./PredictiveSignalCard";
 import { Why } from "./Why";
@@ -27,6 +30,7 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
   const ob = useOrderBlocks(id, tf);
   const fvg = useFvgs(id, tf);
   const sweeps = useSweeps(id, tf);
+  const quote = useMarketQuote(id);
 
   const swings = useMemo(() => {
     const items = ms.data?.items ?? [];
@@ -39,6 +43,23 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
         type: String(b.values.swing_type),
       }));
   }, [ms.data]);
+
+  const brief = useMemo(
+    () =>
+      buildAnalystBrief({
+        decision,
+        predictive,
+        trend,
+        levels: levels.data,
+        events: events.data,
+        orderBlocks: ob.data?.items,
+        fvgs: fvg.data?.items,
+        sweeps: sweeps.data?.items,
+        swings,
+        lastPrice: quote.data?.current_price ?? null,
+      }),
+    [decision, predictive, trend, levels.data, events.data, ob.data, fvg.data, sweeps.data, swings, quote.data],
+  );
 
   const latestBos = events.data?.bos_events?.[0];
   const latestChoch = events.data?.choch_events?.[0];
@@ -56,8 +77,10 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
     <div className="h-full overflow-auto p-3 space-y-3 ai-panel-scroll">
       <div className="px-1 pt-1">
         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-faint">AI Assistant</div>
-        <div className="text-sm text-muted mt-0.5">Live decision support from the analysis engine</div>
+        <div className="text-sm text-muted mt-0.5">Institutional analyst view from live engines</div>
       </div>
+
+      <AnalystBriefCard brief={brief} loading={isLoading} />
 
       <PredictiveSignalCard plan={predictive} loading={isLoading} />
 
@@ -70,7 +93,6 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
         </>
       )}
 
-      {/* Compact analysis stack */}
       <Card
         title="Trend & Structure"
         actions={
@@ -85,8 +107,14 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
                 "Phase confidence": trend.phase_confidence,
               }}
               contributions={[
-                { label: "Supports", value: String(levels.data?.support_levels.length ?? 0) },
-                { label: "Resistances", value: String(levels.data?.resistance_levels.length ?? 0) },
+                {
+                  label: "Nearest support",
+                  value: brief.nearestSupport != null ? String(brief.nearestSupport) : "—",
+                },
+                {
+                  label: "Nearest resistance",
+                  value: brief.nearestResistance != null ? String(brief.nearestResistance) : "—",
+                },
                 { label: "Latest BOS", value: latestBos ? titleCase(latestBos.event_type) : "—" },
                 { label: "Latest CHoCH", value: latestChoch ? titleCase(latestChoch.event_type) : "—" },
               ]}
@@ -144,13 +172,26 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
                 sub={latestChoch ? fmtTime(latestChoch.break_time) : undefined}
               />
             </div>
+
+            {(brief.nearestSupport != null || brief.nearestResistance != null) && (
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                <EventPill
+                  label="Support"
+                  value={brief.nearestSupport != null ? num(brief.nearestSupport).toFixed(2) : "—"}
+                />
+                <EventPill
+                  label="Resistance"
+                  value={brief.nearestResistance != null ? num(brief.nearestResistance).toFixed(2) : "—"}
+                />
+              </div>
+            )}
           </div>
         )}
       </Card>
 
       <Card
         title="Smart Money"
-        subtitle="Institutional footprint"
+        subtitle="Active zones only (chart-matched)"
         actions={
           <Why
             title="Smart Money Summary"
@@ -161,15 +202,15 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
               { label: "Fair value gaps", value: String(fvgCount) },
               { label: "Liquidity sweeps", value: String(sweepCount) },
               { label: "Mitigated zones", value: String(mitigated) },
-              ...(ob.data?.items ?? []).slice(0, 3).map((o) => ({
-                label: `OB ${titleCase(o.type)}`,
-                value: `${Math.round(o.confidence)}%`,
-              })),
+              ...(brief.nearestOb
+                ? [{ label: `Chart OB ${brief.nearestOb.label}`, value: `${Math.round(brief.nearestOb.confidence)}%` }]
+                : []),
+              ...(brief.nearestFvg
+                ? [{ label: `Chart FVG ${brief.nearestFvg.label}`, value: `${Math.round(brief.nearestFvg.confidence)}%` }]
+                : []),
             ]}
             evidence={Object.fromEntries(
-              (ob.data?.items ?? [])
-                .slice(0, 3)
-                .map((o, i) => [`Order block ${i + 1}`, o.confidence]),
+              (ob.data?.items ?? []).slice(0, 3).map((o, i) => [`Order block ${i + 1}`, o.confidence]),
             )}
             raw={{ orderBlocks: ob.data?.items, fvgs: fvg.data?.items, sweeps: sweeps.data?.items }}
           />
@@ -181,7 +222,19 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
           <Stat label="Liquidity Sweeps" value={sweepCount} tone={sweepCount > 0 ? "warn" : "neutral"} />
           <Stat label="Mitigated" value={mitigated} tone="neutral" />
         </div>
-        {(ob.data?.items?.[0] || fvg.data?.items?.[0]) && (
+        {brief.nearestOb && (
+          <p className="mt-3 text-[11px] text-muted leading-relaxed">
+            OB {brief.nearestOb.label}: {brief.nearestOb.low.toFixed(2)}–{brief.nearestOb.high.toFixed(2)} (
+            {Math.round(brief.nearestOb.confidence)}%)
+          </p>
+        )}
+        {brief.nearestFvg && (
+          <p className="mt-1 text-[11px] text-muted leading-relaxed">
+            FVG {brief.nearestFvg.label}: {brief.nearestFvg.low.toFixed(2)}–{brief.nearestFvg.high.toFixed(2)} (
+            {Math.round(brief.nearestFvg.confidence)}%)
+          </p>
+        )}
+        {!brief.nearestOb && !brief.nearestFvg && (ob.data?.items?.[0] || fvg.data?.items?.[0]) && (
           <p className="mt-3 text-[11px] text-muted leading-relaxed line-clamp-3">
             {ob.data?.items?.[0]?.explanation || fvg.data?.items?.[0]?.explanation}
           </p>
@@ -198,7 +251,9 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
               >
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-content truncate">{titleCase(s.setup_type)}</div>
-                  <div className="text-[10px] text-faint">{titleCase(s.direction)} · {fmtTime(s.detected_at)}</div>
+                  <div className="text-[10px] text-faint">
+                    {titleCase(s.direction)} · {fmtTime(s.detected_at)}
+                  </div>
                 </div>
                 <Badge tone={directionTone(s.direction)}>{Math.round(s.confidence_score)}%</Badge>
               </div>
