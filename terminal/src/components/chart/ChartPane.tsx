@@ -158,7 +158,7 @@ export function ChartPane({
             <div className="flex items-center gap-1.5 truncate">
               <PaneSymbolPicker
                 paneId={pane.id}
-                symbolCode={meta?.symbol_code}
+                symbolCode={meta?.symbol_code ?? quote?.symbol_code}
                 compact={compact}
               />
               {!compact && (

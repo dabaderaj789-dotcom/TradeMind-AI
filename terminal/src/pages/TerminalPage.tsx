@@ -130,7 +130,7 @@ export function TerminalPage() {
       <div className="fixed inset-0 z-[60] flex flex-col bg-bg">
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-subtle/30 px-3">
           <div className="min-w-0 truncate text-sm font-semibold text-content">
-            {meta?.symbol_code ?? activePane?.symbolId ?? "Chart"}
+            {meta?.symbol_code ?? quote?.symbol_code ?? activePane?.symbolId ?? "Chart"}
           </div>
           {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
           {predictive && <Badge tone={predictive.stateTone}>{predictive.state}</Badge>}
@@ -181,7 +181,7 @@ export function TerminalPage() {
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle/30 bg-surface/80 px-3 py-2 backdrop-blur-md lg:hidden">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-content">
-            {meta?.symbol_code ?? "Symbol"}
+            {meta?.symbol_code ?? quote?.symbol_code ?? "Symbol"}
           </div>
           <div className="font-mono text-[11px] text-muted">
             {displayPrice}{" "}
@@ -203,7 +203,7 @@ export function TerminalPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="truncate text-[15px] font-semibold tracking-tight text-content">
-                {meta?.symbol_code ?? "Symbol"}
+                {meta?.symbol_code ?? quote?.symbol_code ?? "Symbol"}
               </span>
               <span className="text-[10px] uppercase tracking-wide text-faint">{marketLabel}</span>
               <ConnectionStatusChip />
