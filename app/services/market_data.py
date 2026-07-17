@@ -175,10 +175,10 @@ class MarketDataService:
             if latest is not None:
                 start_time = latest + timedelta(seconds=timeframe.seconds)
             else:
-                start_time = end_time - timedelta(days=30)
+                start_time = end_time - timedelta(days=_default_lookback_days(symbol.exchange.code, timeframe.code))
 
         if start_time is None:
-            start_time = end_time - timedelta(days=30)
+            start_time = end_time - timedelta(days=_default_lookback_days(symbol.exchange.code, timeframe.code))
 
         if start_time.tzinfo is None:
             start_time = start_time.replace(tzinfo=UTC)
@@ -344,3 +344,21 @@ class MarketDataService:
             lot_size=symbol.lot_size,
             is_active=symbol.is_active,
         )
+
+
+def _default_lookback_days(exchange_code: str, timeframe_code: str) -> int:
+    """First-fill lookback — NSE needs longer windows than crypto defaults."""
+    if exchange_code.lower() == "nse":
+        from app.adapters.nse.constants import NSE_LOOKBACK_DAYS
+
+        return NSE_LOOKBACK_DAYS.get(timeframe_code, 90)
+    # Binance / default
+    return {
+        "1m": 3,
+        "5m": 7,
+        "15m": 30,
+        "1h": 30,
+        "4h": 60,
+        "1d": 90,
+        "1w": 365,
+    }.get(timeframe_code, 30)
