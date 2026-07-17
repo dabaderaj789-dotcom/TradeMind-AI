@@ -20,7 +20,7 @@ from app.domain.entities.symbol import Symbol
 from app.domain.enums.market_type import MarketType
 from app.domain.value_objects.timeframe import Timeframe, parse_timeframe
 
-SUPPORTED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
+SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
 
 
 class NseAdapter(ExchangeAdapter):
@@ -102,7 +102,9 @@ class NseAdapter(ExchangeAdapter):
             end=end,
         )
         candles = normalize_yahoo_chart(payload, timeframe, symbol.symbol_code)
-        if timeframe.code == "4h":
+        if timeframe.code == "3m":
+            candles = _aggregate_bars(candles, symbol.symbol_code, "3m", bucket_size=3)
+        elif timeframe.code == "4h":
             candles = _aggregate_to_4h(candles, symbol.symbol_code)
         logger.info(
             "NSE historical bars loaded: {} {} bars={}",
@@ -174,10 +176,22 @@ class NseAdapter(ExchangeAdapter):
 
 def _aggregate_to_4h(candles: list[Candle], symbol_code: str) -> list[Candle]:
     """Aggregate 1h Yahoo bars into 4h candles when requested."""
+    return _aggregate_bars(candles, symbol_code, "4h", bucket_size=4, min_bar_seconds=3 * 3600)
+
+
+def _aggregate_bars(
+    candles: list[Candle],
+    symbol_code: str,
+    tf: str,
+    *,
+    bucket_size: int,
+    min_bar_seconds: int | None = None,
+) -> list[Candle]:
+    """Aggregate finer Yahoo bars into a coarser canonical timeframe."""
     if not candles:
         return []
-    if candles and all(
-        (c.close_time - c.open_time).total_seconds() >= 3 * 3600 for c in candles[:3]
+    if min_bar_seconds is not None and all(
+        (c.close_time - c.open_time).total_seconds() >= min_bar_seconds for c in candles[:3]
     ):
         return candles
 
@@ -185,11 +199,11 @@ def _aggregate_to_4h(candles: list[Candle], symbol_code: str) -> list[Candle]:
     bucket: list[Candle] = []
     for c in candles:
         bucket.append(c)
-        if len(bucket) == 4:
-            out.append(_merge_bucket(bucket, symbol_code, "4h"))
+        if len(bucket) == bucket_size:
+            out.append(_merge_bucket(bucket, symbol_code, tf))
             bucket = []
     if bucket:
-        out.append(_merge_bucket(bucket, symbol_code, "4h"))
+        out.append(_merge_bucket(bucket, symbol_code, tf))
     return out
 
 

@@ -256,8 +256,10 @@ def _nse_india_to_yahoo_shape(
     # Bucket by interval seconds.
     seconds = {
         "1m": 60,
+        "2m": 120,
         "5m": 300,
         "15m": 900,
+        "30m": 1800,
         "60m": 3600,
         "1h": 3600,
         "1d": 86400,

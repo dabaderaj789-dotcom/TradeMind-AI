@@ -57,7 +57,7 @@ class DownloadCandlesRequest(BaseSchema):
     symbol_id: UUID | None = None
     exchange_code: str | None = None
     symbol_code: str | None = None
-    timeframe: str = Field(description="Canonical timeframe: 1m, 5m, 15m, 1h, 4h, 1d, 1w")
+    timeframe: str = Field(description="Canonical timeframe: 1m, 3m, 5m, 15m, 30m, 1h, 4h, 1d, 1w")
     start: datetime | None = Field(default=None, description="Start time UTC; defaults for incremental")
     end: datetime | None = Field(default=None, description="End time UTC; defaults to now")
     incremental: bool = Field(

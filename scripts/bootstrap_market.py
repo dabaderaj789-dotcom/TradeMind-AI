@@ -38,7 +38,7 @@ OPTIONAL_NSE = [
     ("nse", "BANKNIFTY"),
 ]
 
-TIMEFRAMES = ["15m", "1h", "4h", "1d"]
+TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
 
 ANALYSIS_PLUGINS = [
     {"plugin_id": "ema"},

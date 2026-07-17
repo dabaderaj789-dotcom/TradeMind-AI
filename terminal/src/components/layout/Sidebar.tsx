@@ -24,7 +24,7 @@ export function Sidebar() {
   const removeWatch = usePrefs((s) => s.removeWatch);
 
   return (
-    <aside className="hidden lg:flex flex-col w-[264px] shrink-0 h-full border-r border-subtle/60 bg-surface">
+    <aside className="terminal-sidebar hidden h-full w-[240px] shrink-0 flex-col border-r border-subtle/40 bg-surface lg:flex">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 h-14 border-b border-subtle/60">
         <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand to-info flex items-center justify-center shadow-card">

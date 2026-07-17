@@ -114,10 +114,7 @@
     animation: shimmer 1.4s infinite;
   }
   .chart-stage {
-    background:
-      radial-gradient(1200px 480px at 70% -10%, rgb(var(--c-brand) / 0.08), transparent 55%),
-      radial-gradient(900px 420px at 10% 110%, rgb(var(--c-bull) / 0.05), transparent 50%),
-      rgb(var(--c-surface));
+    background: rgb(var(--c-surface));
   }
   .ai-panel-scroll {
     scrollbar-gutter: stable;
@@ -153,4 +150,14 @@
   .input {
     @apply min-h-[44px] text-base;
   }
+}
+
+/* Fullscreen terminal — hide Markets sidebar + bottom nav chrome */
+html[data-terminal-fullscreen="1"] .terminal-shell > aside,
+html[data-terminal-fullscreen="1"] .terminal-mobile-nav {
+  display: none !important;
+}
+
+html[data-terminal-fullscreen="1"] .terminal-shell > main {
+  padding-bottom: 0 !important;
 }

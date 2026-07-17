@@ -39,6 +39,41 @@ export const endpoints = {
   candles: (symbolId: string, timeframe: string, limit = 400, signal?: AbortSignal) =>
     apiGet<CandleList>(`/candles/${symbolId}/latest${qs({ timeframe, limit })}`, signal),
 
+  /** Download + persist candles from the exchange adapter (existing FastAPI). */
+  downloadCandles: (
+    body: { symbol_id: string; timeframe: string; incremental?: boolean },
+    signal?: AbortSignal,
+  ) => apiPost<{ symbol_id: string; timeframe: string; candles_written: number }>("/candles/download", body, signal),
+
+  /** Run analysis plugins and persist results. */
+  executeAnalysis: (
+    body: {
+      symbol_id: string;
+      timeframe: string;
+      plugins: Array<{ plugin_id: string; parameters?: Record<string, unknown> }>;
+      candle_limit?: number;
+      persist?: boolean;
+    },
+    signal?: AbortSignal,
+  ) => apiPost<{ symbol_id: string; timeframe: string }>("/analysis/execute", body, signal),
+
+  executeMarketStructure: (body: { symbol_id: string; timeframe: string; persist?: boolean }, signal?: AbortSignal) =>
+    apiPost("/market-structure/execute", body, signal),
+
+  executeOrderBlocks: (body: { symbol_id: string; timeframe: string; persist?: boolean }, signal?: AbortSignal) =>
+    apiPost("/order-blocks/execute", body, signal),
+
+  executeFvgs: (body: { symbol_id: string; timeframe: string; persist?: boolean }, signal?: AbortSignal) =>
+    apiPost("/fair-value-gaps/execute", body, signal),
+
+  executeSweeps: (body: { symbol_id: string; timeframe: string; persist?: boolean }, signal?: AbortSignal) =>
+    apiPost("/liquidity-sweeps/execute", body, signal),
+
+  executeTradeSetups: (
+    body: { symbol_id: string; timeframe: string; ensure_analysis?: boolean; incremental?: boolean },
+    signal?: AbortSignal,
+  ) => apiPost("/trade-setups/execute", body, signal),
+
   trend: (symbolId: string, timeframe: string, signal?: AbortSignal) =>
     apiGet<Trend>(`/market-structure/trend/${symbolId}${qs({ timeframe })}`, signal),
 
@@ -151,5 +186,18 @@ export interface OhlcCompareResult {
   reference_sample: Array<{ open_time: string; open: number; high: number; low: number; close: number; volume?: number }>;
 }
 
-export const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d", "1w"] as const;
+export const TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"] as const;
 export type Timeframe = (typeof TIMEFRAMES)[number];
+
+/** Display labels for toolbar (TradingView-style). */
+export const TIMEFRAME_LABELS: Record<Timeframe, string> = {
+  "1m": "1m",
+  "3m": "3m",
+  "5m": "5m",
+  "15m": "15m",
+  "30m": "30m",
+  "1h": "1H",
+  "4h": "4H",
+  "1d": "1D",
+  "1w": "1W",
+};

@@ -1,0 +1,234 @@
+/**
+ * Self-contained chart pane — independent symbol, TF, overlays, decision, trade plan.
+ * Reuses TerminalChart instance across timeframe changes (same component, new candle data).
+ */
+
+import { useMemo } from "react";
+import { OverlayToggles } from "./OverlayToggles";
+import { PaneSymbolPicker } from "./PaneSymbolPicker";
+import { TerminalChart, type OverlayData } from "./TerminalChart";
+import { TimeframeSelector } from "./TimeframeSelector";
+import { Badge, Spinner } from "../common/primitives";
+import {
+  useActiveSetups,
+  useAnalysis,
+  useCandles,
+  useFvgs,
+  useLevels,
+  useMarketQuote,
+  useOrderBlocks,
+  useStructureEvents,
+  useSweeps,
+} from "../../hooks/queries";
+import { useDecision } from "../../hooks/useDecision";
+import { useEnsureMarketData } from "../../hooks/useEnsureMarketData";
+import { useLiveStream } from "../../hooks/useLiveStream";
+import { useSymbolMeta } from "../../hooks/useSymbolMeta";
+import type { Timeframe } from "../../lib/endpoints";
+import { cx, fmtPrice, fmtSignedPct, num } from "../../lib/format";
+import type { OverlayId } from "../../lib/overlays";
+import { usePrefs } from "../../store/prefs";
+import { useWorkspace, type ChartPaneState } from "../../store/workspace";
+
+export function ChartPane({
+  pane,
+  compact = false,
+  showToolbar = true,
+}: {
+  pane: ChartPaneState;
+  compact?: boolean;
+  showToolbar?: boolean;
+}) {
+  const activePaneId = useWorkspace((s) => s.activePaneId);
+  const setActivePane = useWorkspace((s) => s.setActivePane);
+  const setPaneTimeframe = useWorkspace((s) => s.setPaneTimeframe);
+  const setPaneOverlay = useWorkspace((s) => s.setPaneOverlay);
+  const marketCategory = usePrefs((s) => s.marketCategory);
+
+  const symbolId = pane.symbolId;
+  const tf = pane.timeframe;
+  const overlays = pane.overlays;
+  const active = pane.id === activePaneId;
+  const meta = useSymbolMeta(symbolId);
+
+  useLiveStream({
+    symbolId,
+    timeframe: tf,
+    market: marketCategory,
+    // Only stream the focused pane — cuts websocket/API load in multi-chart layouts.
+    enabled: !!symbolId && active,
+  });
+
+  const candles = useCandles(symbolId || null, tf);
+  const quoteQ = useMarketQuote(symbolId || null);
+  const levels = useLevels(symbolId || null, tf);
+  const events = useStructureEvents(symbolId || null, tf);
+  const ob = useOrderBlocks(symbolId || null, tf);
+  const fvg = useFvgs(symbolId || null, tf);
+  const sweeps = useSweeps(symbolId || null, tf);
+  const setups = useActiveSetups(symbolId || null, tf);
+  const ema = useAnalysis(symbolId || null, tf, "ema", overlays.ema);
+  const sma = useAnalysis(symbolId || null, tf, "sma", overlays.sma);
+  const vwap = useAnalysis(symbolId || null, tf, "vwap", overlays.vwap);
+  const ms = useAnalysis(
+    symbolId || null,
+    tf,
+    "market_structure",
+    overlays.marketStructure || overlays.bos,
+  );
+  const { decision, annotations, predictive } = useDecision(symbolId || null, tf);
+
+  const bars = candles.data?.items ?? [];
+  const needsFill = !!symbolId && !candles.isLoading && !candles.isFetching && bars.length === 0;
+  const ensure = useEnsureMarketData(symbolId || null, tf, needsFill);
+
+  const swings = useMemo(() => {
+    const items = ms.data?.items ?? [];
+    return items
+      .filter((b) => b.values.swing_type)
+      .slice(-8)
+      .map((b) => ({
+        time: b.open_time,
+        type: String(b.values.swing_type),
+      }));
+  }, [ms.data]);
+
+  const overlayData = useMemo<OverlayData>(
+    () => ({
+      ema: ema.data?.items,
+      sma: sma.data?.items,
+      vwap: vwap.data?.items,
+      quote: quoteQ.data ?? null,
+      orderBlocks: ob.data?.items,
+      fvgs: fvg.data?.items,
+      sweeps: sweeps.data?.items,
+      levels: levels.data ?? null,
+      events: events.data ?? null,
+      setups: setups.data?.items,
+      annotations,
+      predictive,
+      swings,
+    }),
+    [
+      ema.data,
+      sma.data,
+      vwap.data,
+      quoteQ.data,
+      ob.data,
+      fvg.data,
+      sweeps.data,
+      levels.data,
+      events.data,
+      setups.data,
+      annotations,
+      predictive,
+      swings,
+    ],
+  );
+
+  const quote = quoteQ.data;
+  const last = bars[bars.length - 1];
+  const dayChange =
+    quote?.day_change_pct ??
+    (last && bars[bars.length - 2]
+      ? ((num(last.close) - num(bars[bars.length - 2].close)) / num(bars[bars.length - 2].close)) *
+        100
+      : 0);
+  const displayPrice = quote ? fmtPrice(quote.current_price) : last ? fmtPrice(last.close) : "—";
+
+  const onOverlay = (id: OverlayId, on: boolean) => setPaneOverlay(pane.id, id, on);
+
+  return (
+    <div
+      role="presentation"
+      onMouseDown={() => setActivePane(pane.id)}
+      className={cx(
+        "flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface/40",
+        active ? "ring-1 ring-brand/40" : "ring-1 ring-transparent",
+      )}
+    >
+      {showToolbar && (
+        <div
+          className={cx(
+            "flex shrink-0 items-center gap-2 border-b border-subtle/40 px-2",
+            compact ? "h-9" : "h-10",
+          )}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 truncate">
+              <PaneSymbolPicker
+                paneId={pane.id}
+                symbolCode={meta?.symbol_code}
+                compact={compact}
+              />
+              {!compact && (
+                <span
+                  className={cx(
+                    "font-mono text-[11px]",
+                    dayChange >= 0 ? "text-bull" : "text-bear",
+                  )}
+                >
+                  {displayPrice} {fmtSignedPct(dayChange)}
+                </span>
+              )}
+              {decision && (
+                <Badge tone={decision.tone}>{decision.kind}</Badge>
+              )}
+            </div>
+          </div>
+          <TimeframeSelector
+            value={tf}
+            onChange={(t) => setPaneTimeframe(pane.id, t as Timeframe)}
+            compact
+          />
+          <PaneOverlayMenu overlays={overlays} onChange={onOverlay} />
+        </div>
+      )}
+
+      <div className="relative min-h-0 flex-1 chart-stage">
+        {!symbolId ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted">
+            Select a symbol from Markets
+          </div>
+        ) : candles.isLoading || ensure.isBusy ? (
+          <Spinner
+            label={
+              ensure.status === "downloading"
+                ? "Downloading candles…"
+                : ensure.status === "analyzing"
+                  ? "Analyzing market structure…"
+                  : "Loading chart…"
+            }
+          />
+        ) : ensure.status === "error" && bars.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted">
+            <p>Could not load candles for {tf}.</p>
+            <p className="text-[11px] text-faint">{ensure.error}</p>
+          </div>
+        ) : bars.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted">
+            Preparing chart…
+          </div>
+        ) : (
+          <TerminalChart candles={bars} enabled={overlays} data={overlayData} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PaneOverlayMenu({
+  overlays,
+  onChange,
+}: {
+  overlays: Record<OverlayId, boolean>;
+  onChange: (id: OverlayId, on: boolean) => void;
+}) {
+  // Local bridge so OverlayToggles can drive per-pane overlays without global settings.
+  return (
+    <OverlayToggles
+      overlays={overlays}
+      onChange={onChange}
+    />
+  );
+}

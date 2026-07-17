@@ -12,8 +12,10 @@ MAX_BARS_PER_REQUEST = 5000
 # Yahoo interval mapping for supported timeframes.
 INTERVAL_MAP = {
     "1m": "1m",
+    "3m": "1m",  # Yahoo has no native 3m; aggregate 1m → 3m in adapter
     "5m": "5m",
     "15m": "15m",
+    "30m": "30m",
     "1h": "60m",
     "4h": "60m",  # resampled by caller if needed; Yahoo has no native 4h
     "1d": "1d",
@@ -23,8 +25,10 @@ INTERVAL_MAP = {
 # First-fill lookback when Neon has zero candles for this TF.
 NSE_LOOKBACK_DAYS = {
     "1m": 7,
+    "3m": 10,
     "5m": 14,
     "15m": 30,
+    "30m": 45,
     "1h": 60,
     "4h": 90,
     "1d": 365,
