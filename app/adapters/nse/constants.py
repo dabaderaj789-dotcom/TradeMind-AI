@@ -25,7 +25,7 @@ INTERVAL_MAP = {
 # First-fill lookback when Neon has zero candles for this TF.
 NSE_LOOKBACK_DAYS = {
     "1m": 7,
-    "3m": 10,
+    "3m": 3,  # 1m→3m aggregate; keep short to avoid Yahoo/proxy timeouts
     "5m": 14,
     "15m": 30,
     "30m": 45,

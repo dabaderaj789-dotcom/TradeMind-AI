@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.base import ExchangeAdapter
 from app.adapters.registry import AdapterRegistry
 from app.core.exceptions import NotFoundError, ValidationError as AppValidationError
+from app.domain.entities.candle import Candle
 from app.domain.value_objects.timeframe import parse_timeframe
 from app.pipeline.validator import CandleValidator
 from app.pipeline.writer import CandleWriter
@@ -199,12 +200,29 @@ class MarketDataService:
             incremental,
         )
 
-        raw_candles = await adapter.get_historical_data(
-            symbol.symbol_code,
-            tf,
-            start_time,
-            end_time,
-        )
+        # NSE has no native Yahoo 3m; prefer aggregating stored 1m bars (avoids Yahoo 1m 502s).
+        raw_candles = []
+        if symbol.exchange.code == "nse" and timeframe.code == "3m":
+            raw_candles = await self._aggregate_nse_3m_from_1m(
+                symbol_id=symbol.id,
+                symbol_code=symbol.symbol_code,
+                start=start_time,
+                end=end_time,
+            )
+            if raw_candles:
+                logger.info(
+                    "NSE 3m built from stored 1m: {} bars={}",
+                    symbol.symbol_code,
+                    len(raw_candles),
+                )
+
+        if not raw_candles:
+            raw_candles = await adapter.get_historical_data(
+                symbol.symbol_code,
+                tf,
+                start_time,
+                end_time,
+            )
 
         validation = self.validator.validate_batch(raw_candles)
         writer = CandleWriter(self.session)
@@ -350,6 +368,74 @@ class MarketDataService:
             instrument=instrument,
         )
 
+    async def _aggregate_nse_3m_from_1m(
+        self,
+        *,
+        symbol_id: uuid.UUID,
+        symbol_code: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[Candle]:
+        """Build 3m candles from persisted 1m bars when Yahoo 1m is unavailable."""
+        tf_1m = await self._timeframe_repo().get_by_code("1m")
+        if tf_1m is None:
+            return []
+        rows = await self._candle_repo().get_candles(
+            symbol_id,
+            tf_1m.id,
+            start=start,
+            end=end,
+            limit=5000,
+        )
+        if len(rows) < 3:
+            # Ensure 1m exists first so aggregation can run.
+            try:
+                await self.download_candles(
+                    timeframe_code="1m",
+                    symbol_id=symbol_id,
+                    incremental=True,
+                )
+            except Exception as exc:  # noqa: BLE001 — soft-fallback path
+                logger.warning("NSE 1m prefetch for 3m failed: {}", exc)
+            rows = await self._candle_repo().get_candles(
+                symbol_id,
+                tf_1m.id,
+                start=start,
+                end=end,
+                limit=5000,
+            )
+        if len(rows) < 3:
+            return []
+
+        ordered = sorted(rows, key=lambda c: c.open_time)
+        out: list[Candle] = []
+        bucket = []
+        for row in ordered:
+            bucket.append(row)
+            if len(bucket) == 3:
+                out.append(_merge_orm_bucket(bucket, symbol_code, "3m"))
+                bucket = []
+        if bucket:
+            out.append(_merge_orm_bucket(bucket, symbol_code, "3m"))
+        return out
+
+
+def _merge_orm_bucket(bucket: list, symbol_code: str, tf: str) -> Candle:
+    first, last = bucket[0], bucket[-1]
+    return Candle(
+        symbol_code=symbol_code,
+        timeframe_code=tf,
+        open_time=first.open_time,
+        close_time=last.close_time,
+        open=first.open,
+        high=max(c.high for c in bucket),
+        low=min(c.low for c in bucket),
+        close=last.close,
+        volume=sum((c.volume for c in bucket), start=first.volume * 0),
+        is_complete=True,
+        source="nse",
+    )
+
 
 def _default_lookback_days(exchange_code: str, timeframe_code: str) -> int:
     """First-fill lookback — NSE needs longer windows than crypto defaults."""
@@ -360,8 +446,10 @@ def _default_lookback_days(exchange_code: str, timeframe_code: str) -> int:
     # Binance / default
     return {
         "1m": 3,
+        "3m": 7,
         "5m": 7,
         "15m": 30,
+        "30m": 30,
         "1h": 30,
         "4h": 60,
         "1d": 90,
