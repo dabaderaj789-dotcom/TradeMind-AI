@@ -11,35 +11,46 @@ import type {
 } from "./types";
 import type { PredictivePlan } from "./predictiveSignal";
 import type { ChartAnnotation } from "./decision";
+import { smcConfidencePct } from "./format";
 
 export const MIN_CHART_SMC_CONFIDENCE = 70;
 
+export { smcConfidencePct };
+
+function isActiveOrderBlock(o: OrderBlock): boolean {
+  const status = o.status.toLowerCase();
+  const mit = o.mitigation_state.toLowerCase();
+  // Engines label live zones as fresh/active with untouched/unmitigated mitigation.
+  const statusOk = status === "active" || status === "fresh" || status === "valid";
+  const mitOk = mit.includes("untouched") || mit.includes("unmitigated");
+  return statusOk && mitOk && smcConfidencePct(o.confidence) >= MIN_CHART_SMC_CONFIDENCE;
+}
+
 export function selectActiveOrderBlocks(items: OrderBlock[] | undefined, showHistorical = false): OrderBlock[] {
-  const list = items ?? [];
-  const active = list.filter(
-    (o) =>
-      o.status.toLowerCase() === "active" &&
-      o.mitigation_state.toLowerCase().includes("unmitigated") &&
-      o.confidence >= MIN_CHART_SMC_CONFIDENCE,
-  );
+  const active = [...(items ?? [])]
+    .filter(isActiveOrderBlock)
+    .sort((a, b) => smcConfidencePct(b.confidence) - smcConfidencePct(a.confidence));
   if (showHistorical) return active.slice(0, 3);
   return active.slice(0, 1);
 }
 
 export function selectFreshFvgs(items: Fvg[] | undefined, showHistorical = false): Fvg[] {
-  const list = items ?? [];
-  const fresh = list.filter(
-    (g) =>
-      g.status.toLowerCase() === "open" &&
-      g.fill_percentage < 50 &&
-      g.confidence >= MIN_CHART_SMC_CONFIDENCE,
-  );
+  const fresh = [...(items ?? [])]
+    .filter(
+      (g) =>
+        g.status.toLowerCase() === "open" &&
+        g.fill_percentage < 50 &&
+        smcConfidencePct(g.confidence) >= MIN_CHART_SMC_CONFIDENCE,
+    )
+    .sort((a, b) => smcConfidencePct(b.confidence) - smcConfidencePct(a.confidence));
   if (showHistorical) return fresh.slice(0, 3);
   return fresh.slice(0, 1);
 }
 
 export function selectCurrentSweeps(items: LiquiditySweep[] | undefined, showHistorical = false): LiquiditySweep[] {
-  const list = (items ?? []).filter((s) => s.confidence >= MIN_CHART_SMC_CONFIDENCE);
+  const list = [...(items ?? [])]
+    .filter((s) => smcConfidencePct(s.confidence) >= MIN_CHART_SMC_CONFIDENCE)
+    .sort((a, b) => smcConfidencePct(b.confidence) - smcConfidencePct(a.confidence));
   if (showHistorical) return list.slice(0, 2);
   return list.slice(0, 1);
 }

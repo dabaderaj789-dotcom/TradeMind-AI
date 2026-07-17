@@ -1,4 +1,4 @@
-import { confidenceLabel, directionTone, num, riskRating, titleCase, type Tone } from "./format";
+import { confidenceLabel, directionTone, num, riskRating, smcConfidencePct, titleCase, type Tone } from "./format";
 import type {
   Candle,
   Fvg,
@@ -324,14 +324,22 @@ function bestOb(orderBlocks: OrderBlock[], bullish: boolean): OrderBlock | null 
   const type = bullish ? "bullish" : "bearish";
   return (
     orderBlocks
-      .filter(
-        (o) =>
+      .filter((o) => {
+        const status = o.status.toLowerCase();
+        const mit = o.mitigation_state.toLowerCase();
+        const statusOk = status === "active" || status === "fresh" || status === "valid";
+        const mitOk =
+          mit.includes("untouched") ||
+          mit.includes("unmitigated") ||
+          (!mit.includes("fully") && !mit.includes("invalid"));
+        return (
           o.type.toLowerCase().includes(type) &&
-          o.confidence >= MIN_OB_CONFIDENCE &&
-          !o.mitigation_state.toLowerCase().includes("fully") &&
-          !o.mitigation_state.toLowerCase().includes("invalid"),
-      )
-      .sort((a, b) => b.confidence - a.confidence)[0] ?? null
+          statusOk &&
+          mitOk &&
+          smcConfidencePct(o.confidence) >= MIN_OB_CONFIDENCE
+        );
+      })
+      .sort((a, b) => smcConfidencePct(b.confidence) - smcConfidencePct(a.confidence))[0] ?? null
   );
 }
 
@@ -342,24 +350,27 @@ function bestFvg(fvgs: Fvg[], bullish: boolean): Fvg | null {
       .filter(
         (f) =>
           f.type.toLowerCase().includes(type) &&
-          f.confidence >= MIN_FVG_CONFIDENCE &&
+          smcConfidencePct(f.confidence) >= MIN_FVG_CONFIDENCE &&
           f.fill_percentage < 60, // mostly open — filled gaps are weak
       )
-      .sort((a, b) => b.confidence - a.confidence)[0] ?? null
+      .sort((a, b) => smcConfidencePct(b.confidence) - smcConfidencePct(a.confidence))[0] ?? null
   );
 }
 
 function bestSweep(sweeps: LiquiditySweep[], bullish: boolean): LiquiditySweep | null {
-  const type = bullish ? "bullish" : "bearish";
+  // Engines emit buy_side / sell_side (and occasionally bullish / bearish).
   return (
     sweeps
-      .filter(
-        (s) =>
-          s.type.toLowerCase().includes(type) &&
-          s.confidence >= MIN_SWEEP_CONFIDENCE &&
-          (s.status.toLowerCase().includes("confirm") || s.confirmed_at),
-      )
-      .sort((a, b) => b.confidence - a.confidence)[0] ?? null
+      .filter((s) => {
+        const t = s.type.toLowerCase();
+        const sideOk = bullish
+          ? t.includes("buy") || t.includes("bull")
+          : t.includes("sell") || t.includes("bear");
+        const confirmed =
+          s.status.toLowerCase().includes("confirm") || Boolean(s.confirmed_at);
+        return sideOk && confirmed && smcConfidencePct(s.confidence) >= MIN_SWEEP_CONFIDENCE;
+      })
+      .sort((a, b) => smcConfidencePct(b.confidence) - smcConfidencePct(a.confidence))[0] ?? null
   );
 }
 

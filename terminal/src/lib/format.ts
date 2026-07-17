@@ -8,6 +8,13 @@ export const isNum = (v: unknown): v is number => {
   return Number.isFinite(n);
 };
 
+/** API SMC engines emit 0–1 confidence; some UI paths already use 0–100. */
+export function smcConfidencePct(value: number | undefined | null): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n <= 1.0001 ? n * 100 : n;
+}
+
 export function fmtPrice(value: unknown): string {
   const n = num(value);
   if (n === 0) return "0";

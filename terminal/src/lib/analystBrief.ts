@@ -10,6 +10,7 @@ import {
   selectCurrentSweeps,
   selectFreshFvgs,
   selectNearestLevels,
+  smcConfidencePct,
 } from "./chartQuality";
 import { num, titleCase } from "./format";
 import type { PredictivePlan } from "./predictiveSignal";
@@ -91,7 +92,7 @@ export function buildAnalystBrief(opts: {
     ? titleCase(decision.marketHealth.liquidity)
     : "Unknown";
   if (sweep) {
-    liquidityStatus = `${titleCase(sweep.type.replace(/_/g, " "))} @ ${num(sweep.sweep_level).toFixed(2)} (${Math.round(sweep.confidence)}%)`;
+    liquidityStatus = `${titleCase(sweep.type.replace(/_/g, " "))} @ ${num(sweep.sweep_level).toFixed(2)} (${Math.round(smcConfidencePct(sweep.confidence))}%)`;
   } else if ((sweeps?.length ?? 0) === 0) {
     liquidityStatus = `${liquidityStatus} · no recent sweep`;
   }
@@ -124,7 +125,7 @@ export function buildAnalystBrief(opts: {
           label: titleCase(ob.type.replace(/_/g, " ")),
           high: num(ob.zone_high),
           low: num(ob.zone_low),
-          confidence: ob.confidence,
+          confidence: smcConfidencePct(ob.confidence),
         }
       : null,
     nearestFvg: fvg
@@ -132,7 +133,7 @@ export function buildAnalystBrief(opts: {
           label: titleCase(fvg.type.replace(/_/g, " ")),
           high: num(fvg.gap_high),
           low: num(fvg.gap_low),
-          confidence: fvg.confidence,
+          confidence: smcConfidencePct(fvg.confidence),
         }
       : null,
     liquidityStatus,
