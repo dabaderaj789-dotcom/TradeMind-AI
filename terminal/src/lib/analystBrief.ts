@@ -24,14 +24,25 @@ import type {
 } from "./types";
 
 export interface AnalystBrief {
+  /** One-line directional read: Bullish / Bearish / Neutral + qualifier. */
+  marketBias: string;
+  marketBiasTone: "bull" | "bear" | "neutral";
   trend: string;
   structure: string;
+  /** Buying/selling pressure narrative from momentum, volatility and volume health. */
+  orderFlow: string;
   nearestSupport: number | null;
   nearestResistance: number | null;
   nearestOb: { label: string; high: number; low: number; confidence: number } | null;
   nearestFvg: { label: string; high: number; low: number; confidence: number } | null;
   liquidityStatus: string;
   marketPhase: string;
+  /** Institutional-analyst narrative: what the desk is doing and why. */
+  tradeThesis: string;
+  /** What would invalidate the current read/plan. */
+  invalidation: string;
+  decisionLabel: string;
+  confidence: number;
   whyWait: string | null;
   unlockBeforeBuy: string[];
   expectedRr: number | null;
@@ -115,7 +126,46 @@ export function buildAnalystBrief(opts: {
     decision?.signalQuality.riskReward ??
     null;
 
+  // Market bias — direction + higher-timeframe agreement, plain language.
+  const rawTrend = (trend?.trend ?? decision?.trendLabel ?? "").toLowerCase();
+  const biasTone: "bull" | "bear" | "neutral" = rawTrend.includes("up") || rawTrend.includes("bull")
+    ? "bull"
+    : rawTrend.includes("down") || rawTrend.includes("bear")
+      ? "bear"
+      : "neutral";
+  const htfNote = decision
+    ? decision.mtf.htfAligned
+      ? "higher timeframes agree"
+      : "higher timeframes (4H/1D) do not confirm"
+    : "higher-timeframe read unavailable";
+  const marketBias =
+    biasTone === "neutral"
+      ? `Neutral — no dominant direction; ${htfNote}`
+      : `${biasTone === "bull" ? "Bullish" : "Bearish"} — ${htfNote}`;
+
+  // Order flow narrative from market health (momentum / volatility / liquidity).
+  const mh = decision?.marketHealth;
+  const orderFlow = mh
+    ? `${titleCase(mh.momentum)} momentum, ${mh.volatility.toLowerCase()} volatility, ${mh.liquidity.toLowerCase()} liquidity${mh.tradeable ? "" : " — below tradeable quality"}`
+    : "Order flow read pending — run analysis for this timeframe";
+
+  // Trade thesis — the analyst's one-paragraph desk view.
+  const tradeThesis = decision
+    ? decision.actionable
+      ? decision.explainability.whyDirection
+      : `Standing aside. ${decision.explainability.whyNotOpposite} ${decision.explainability.whyNow}`
+    : "No thesis yet — waiting for the decision engine output.";
+
+  const invalidation = decision?.explainability.invalidation ?? "No active plan to invalidate.";
+
   return {
+    marketBias,
+    marketBiasTone: biasTone,
+    orderFlow,
+    tradeThesis,
+    invalidation,
+    decisionLabel: decision?.kind ?? "WAIT",
+    confidence: decision?.confidence ?? 0,
     trend: trendLabel,
     structure: structureLabel,
     nearestSupport: support,

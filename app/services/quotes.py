@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +30,11 @@ def _round_price(p: float) -> float:
     a = abs(p)
     d = 2 if a >= 1000 else 4 if a >= 1 else 6 if a >= 0.01 else 8
     return round(p, d)
+
+
+def _close_time_utc(bar) -> datetime:  # noqa: ANN001 — ORM Candle
+    t = bar.close_time
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
 
 
 @dataclass
@@ -66,6 +71,17 @@ class QuoteService:
         now = datetime.now(UTC)
         today = now.date()
         last = bars_15[-1] if bars_15 else bars_1d[-1]
+
+        # Current price must be the freshest stored close across intraday TFs —
+        # not just 15m, which can lag 1m/5m/1h data by several bars.
+        for tf_code in ("1m", "3m", "5m", "30m", "1h"):
+            tf_fine = await self._tf_repo().get_by_code(tf_code)
+            if tf_fine is None:
+                continue
+            fine = await self._candle_repo().get_latest(symbol.id, tf_fine.id, limit=1)
+            if fine and _close_time_utc(fine[-1]) > _close_time_utc(last):
+                last = fine[-1]
+
         current = _f(last.close)
 
         today_bars = [
@@ -113,7 +129,16 @@ class QuoteService:
         exch = (symbol.exchange.code if symbol.exchange else "").lower()
         mtype = (symbol.market.market_type if symbol.market else "").lower()
         is_equity = exch in {"nse", "bse"} or mtype == "equity"
-        market_status: str = "CLOSED" if is_equity and now.weekday() >= 5 else "OPEN"
+        market_status: str = "OPEN"
+        if is_equity:
+            # NSE cash session: Mon–Fri 09:15–15:30 IST (UTC+5:30).
+            ist = now + timedelta(hours=5, minutes=30)
+            in_session = (
+                ist.weekday() < 5
+                and (ist.hour, ist.minute) >= (9, 15)
+                and (ist.hour, ist.minute) <= (15, 30)
+            )
+            market_status = "OPEN" if in_session else "CLOSED"
 
         provider = "binance" if exch == "binance" else exch or "database"
         return MarketQuoteResponse(

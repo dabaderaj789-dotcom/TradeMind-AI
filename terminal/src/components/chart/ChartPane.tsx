@@ -26,6 +26,7 @@ import { useLiveStream } from "../../hooks/useLiveStream";
 import { useSymbolMeta } from "../../hooks/useSymbolMeta";
 import type { Timeframe } from "../../lib/endpoints";
 import { cx, fmtPrice, fmtSignedPct, num } from "../../lib/format";
+import { dataFreshness, resolvePrice, timeframeSeconds } from "../../lib/marketPrice";
 import type { OverlayId } from "../../lib/overlays";
 import { usePrefs } from "../../store/prefs";
 import { useWorkspace, type ChartPaneState } from "../../store/workspace";
@@ -79,7 +80,16 @@ export function ChartPane({
   const { decision, annotations, predictive } = useDecision(symbolId || null, tf);
 
   const bars = candles.data?.items ?? [];
-  const needsFill = !!symbolId && !candles.isLoading && !candles.isFetching && bars.length === 0;
+  // Refresh when empty OR when the newest bar lags the live market by >2 bars.
+  // (Cooldown inside useEnsureMarketData prevents refetch loops.)
+  const lastBar = bars.length ? bars[bars.length - 1] : null;
+  const staleMs = (timeframeSeconds(tf) * 2 + 120) * 1000;
+  const isStale =
+    !!lastBar &&
+    quoteQ.data?.market_status !== "CLOSED" &&
+    Date.now() - Date.parse(lastBar.close_time || lastBar.open_time) > staleMs;
+  const needsFill =
+    !!symbolId && !candles.isLoading && !candles.isFetching && (bars.length === 0 || isStale);
   const ensure = useEnsureMarketData(symbolId || null, tf, needsFill);
 
   const swings = useMemo(() => {
@@ -93,12 +103,21 @@ export function ChartPane({
       }));
   }, [ms.data]);
 
+  // One synchronized price for toolbar, header and chart "Last" line.
+  const resolved = useMemo(
+    () => resolvePrice(quoteQ.data ?? null, candles.data?.items ?? []),
+    [quoteQ.data, candles.data],
+  );
+
   const overlayData = useMemo<OverlayData>(
     () => ({
       ema: ema.data?.items,
       sma: sma.data?.items,
       vwap: vwap.data?.items,
-      quote: quoteQ.data ?? null,
+      quote:
+        quoteQ.data && resolved.price != null
+          ? { ...quoteQ.data, current_price: resolved.price }
+          : (quoteQ.data ?? null),
       orderBlocks: ob.data?.items,
       fvgs: fvg.data?.items,
       sweeps: sweeps.data?.items,
@@ -123,6 +142,7 @@ export function ChartPane({
       annotations,
       predictive,
       swings,
+      resolved,
     ],
   );
 
@@ -134,7 +154,8 @@ export function ChartPane({
       ? ((num(last.close) - num(bars[bars.length - 2].close)) / num(bars[bars.length - 2].close)) *
         100
       : 0);
-  const displayPrice = quote ? fmtPrice(quote.current_price) : last ? fmtPrice(last.close) : "—";
+  const displayPrice = resolved.price != null ? fmtPrice(resolved.price) : "—";
+  const freshness = dataFreshness(resolved.asOfMs, tf, quote?.market_status ?? null);
 
   const onOverlay = (id: OverlayId, on: boolean) => setPaneOverlay(pane.id, id, on);
 
@@ -171,6 +192,25 @@ export function ChartPane({
                   {displayPrice} {fmtSignedPct(dayChange)}
                 </span>
               )}
+              {symbolId && bars.length > 0 && (
+                <span
+                  className={cx(
+                    "rounded px-1 py-px text-[9px] font-semibold tracking-wide",
+                    freshness.live
+                      ? "bg-bull/10 text-bull"
+                      : freshness.tone === "warn"
+                        ? "bg-warn/10 text-warn"
+                        : "bg-neutral/10 text-faint",
+                  )}
+                  title={
+                    freshness.ageSeconds != null
+                      ? `Data as of ${resolved.asOfMs ? new Date(resolved.asOfMs).toLocaleTimeString() : "—"}`
+                      : "No data"
+                  }
+                >
+                  {freshness.label}
+                </span>
+              )}
               {decision && (
                 <Badge tone={decision.tone}>{decision.kind}</Badge>
               )}
@@ -190,7 +230,7 @@ export function ChartPane({
           <div className="flex h-full items-center justify-center text-sm text-muted">
             Select a symbol from Markets
           </div>
-        ) : candles.isLoading || ensure.isBusy ? (
+        ) : candles.isLoading || (ensure.isBusy && bars.length === 0) ? (
           <Spinner
             label={
               ensure.status === "downloading"

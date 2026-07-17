@@ -19,6 +19,7 @@ import { useCandles, useMarketQuote } from "../hooks/queries";
 import { useSymbolMeta } from "../hooks/useSymbolMeta";
 import type { Timeframe } from "../lib/endpoints";
 import { cx, fmtPrice, fmtSignedPct, num } from "../lib/format";
+import { dataFreshness, resolvePrice } from "../lib/marketPrice";
 import type { OverlayId } from "../lib/overlays";
 import { MARKETS } from "../lib/markets";
 import { usePrefs } from "../store/prefs";
@@ -84,7 +85,9 @@ export function TerminalPage() {
       ? ((num(last.close) - num(bars[bars.length - 2].close)) / num(bars[bars.length - 2].close)) *
         100
       : 0);
-  const displayPrice = quote ? fmtPrice(quote.current_price) : last ? fmtPrice(last.close) : "—";
+  const resolved = resolvePrice(quote ?? null, bars);
+  const displayPrice = resolved.price != null ? fmtPrice(resolved.price) : "—";
+  const freshness = dataFreshness(resolved.asOfMs, activeTf, quote?.market_status ?? null);
   const marketLabel = MARKETS.find((m) => m.id === marketCategory)?.label ?? "Market";
   const multi = layout !== "1";
   const compactPanes = layout === "6" || layout === "8";
@@ -185,7 +188,17 @@ export function TerminalPage() {
           </div>
           <div className="font-mono text-[11px] text-muted">
             {displayPrice}{" "}
-            <span className={dayChange >= 0 ? "text-bull" : "text-bear"}>{fmtSignedPct(dayChange)}</span>
+            <span className={dayChange >= 0 ? "text-bull" : "text-bear"}>{fmtSignedPct(dayChange)}</span>{" "}
+            {bars.length > 0 && (
+              <span
+                className={cx(
+                  "rounded px-1 py-px text-[9px] font-semibold tracking-wide",
+                  freshness.live ? "bg-bull/10 text-bull" : freshness.tone === "warn" ? "bg-warn/10 text-warn" : "bg-neutral/10 text-faint",
+                )}
+              >
+                {freshness.label}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -211,6 +224,21 @@ export function TerminalPage() {
                 <Badge tone={quote.market_status === "OPEN" ? "bull" : "neutral"}>
                   {quote.market_status}
                 </Badge>
+              )}
+              {bars.length > 0 && (
+                <span
+                  className={cx(
+                    "rounded px-1.5 py-px text-[9px] font-semibold tracking-wide",
+                    freshness.live
+                      ? "bg-bull/10 text-bull"
+                      : freshness.tone === "warn"
+                        ? "bg-warn/10 text-warn"
+                        : "bg-neutral/10 text-faint",
+                  )}
+                  title={resolved.asOfMs ? `Data as of ${new Date(resolved.asOfMs).toLocaleTimeString()}` : "No data"}
+                >
+                  {freshness.label}
+                </span>
               )}
               {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
               {predictive && (

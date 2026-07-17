@@ -14,7 +14,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
-import { annotationCaption, type ChartAnnotation } from "../../lib/decision";
+import type { ChartAnnotation } from "../../lib/decision";
 import type { PredictivePlan } from "../../lib/predictiveSignal";
 import { isNum, num } from "../../lib/format";
 import {
@@ -29,6 +29,7 @@ import {
   selectTradePlan,
 } from "../../lib/chartQuality";
 import { useSettings } from "../../store/settings";
+import { ZonesPrimitive, type PriceZone } from "./zonesPrimitive";
 import type { OverlayId } from "../../lib/overlays";
 import type {
   AnalysisBar,
@@ -97,6 +98,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const lineRefs = useRef<Partial<Record<"ema" | "sma" | "vwap", ISeriesApi<"Line">>>>({});
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const zonesRef = useRef<ZonesPrimitive | null>(null);
   const candlesRef = useRef<Candle[]>(candles);
   const [chartGeneration, setChartGeneration] = useState(0);
   candlesRef.current = candles;
@@ -133,11 +135,15 @@ export function TerminalChart({ candles, enabled, data }: Props) {
       wickDownColor: "#f87171",
     });
     const volumeSeries = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol" });
-    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } });
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.88, bottom: 0 } });
+
+    const zones = new ZonesPrimitive();
+    candleSeries.attachPrimitive(zones);
 
     chartRef.current = chart;
     candleRef.current = candleSeries;
     volumeRef.current = volumeSeries;
+    zonesRef.current = zones;
     // Replay data/overlay effects after the imperative chart refs exist.
     // This also covers React StrictMode's setup → cleanup → setup lifecycle.
     setChartGeneration((generation) => generation + 1);
@@ -147,6 +153,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
       chartRef.current = null;
       candleRef.current = null;
       volumeRef.current = null;
+      zonesRef.current = null;
       lineRefs.current = {};
       priceLinesRef.current = [];
     };
@@ -165,7 +172,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
     const volumeData: HistogramData[] = sorted.map((c) => ({
       time: toTime(c.open_time),
       value: num(c.volume),
-      color: num(c.close) >= num(c.open) ? "rgba(34,197,94,0.32)" : "rgba(239,68,68,0.32)",
+      color: num(c.close) >= num(c.open) ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)",
     }));
     candleRef.current.setData(candleData);
     volumeRef.current.setData(volumeData);
@@ -218,6 +225,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
     const bars = candlesRef.current;
     const structure = selectCurrentStructure(data.events, showHistorical);
 
+    // Structure events — quiet text captions, no arrows. Price action stays primary.
     if (enabled.bos) {
       for (const e of structure.bos_events) {
         const up = e.break_price >= e.broken_swing_price;
@@ -225,8 +233,9 @@ export function TerminalChart({ candles, enabled, data }: Props) {
         markers.push({
           time: nearestCandleTime(bars, e.break_time),
           position: up ? "belowBar" : "aboveBar",
-          color: up ? "#22c55e" : "#ef4444",
+          color: up ? "rgba(134,239,172,0.6)" : "rgba(252,165,165,0.6)",
           shape: up ? "arrowUp" : "arrowDown",
+          size: 0,
           text,
           priority: markerPriority(text),
         });
@@ -239,40 +248,45 @@ export function TerminalChart({ candles, enabled, data }: Props) {
         markers.push({
           time: nearestCandleTime(bars, e.break_time),
           position: up ? "belowBar" : "aboveBar",
-          color: "#fbbf24",
+          color: "rgba(251,191,36,0.65)",
           shape: "circle",
+          size: 0,
           text,
           priority: markerPriority(text),
         });
       }
     }
 
-    // Active structure swings only (last few HH/HL/LH/LL) — not full history.
+    // Active structure swings only (last few HH/HL/LH/LL) — muted, text-only.
     if (enabled.marketStructure && data.swings?.length) {
-      const recent = showHistorical ? data.swings.slice(-8) : data.swings.slice(-4);
+      const recent = showHistorical ? data.swings.slice(-6) : data.swings.slice(-3);
       for (const s of recent) {
         const high = s.type === "HH" || s.type === "LH";
         markers.push({
           time: nearestCandleTime(bars, s.time),
           position: high ? "aboveBar" : "belowBar",
-          color: s.type.startsWith("H") ? "#86efac" : "#fca5a5",
+          color: s.type.startsWith("H") ? "rgba(134,239,172,0.5)" : "rgba(252,165,165,0.5)",
           shape: "square",
+          size: 0,
           text: s.type,
           priority: 25,
         });
       }
     }
 
+    // AI trade signal — only ever painted for an actionable BUY/SELL decision,
+    // anchored at the confirmation candle. WAIT never produces a marker.
     if (enabled.tradeSetups) {
       for (const a of selectAnnotations(data.annotations)) {
         const time = nearestCandleTime(bars, a.time);
-        const text = annotationCaption(a);
+        const text = `${a.label} ${Math.round(a.confidence)}%`;
         if (a.side === "buy") {
           markers.push({
             time,
             position: "belowBar",
             color: "#22c55e",
             shape: "arrowUp",
+            size: 2,
             text,
             priority: markerPriority(text),
           });
@@ -282,6 +296,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
             position: "aboveBar",
             color: "#ef4444",
             shape: "arrowDown",
+            size: 2,
             text,
             priority: markerPriority(text),
           });
@@ -321,86 +336,120 @@ export function TerminalChart({ candles, enabled, data }: Props) {
       );
     };
 
+    // Nearest S/R — hairline dashed levels, muted.
     if (enabled.marketStructure) {
       const lastPx =
         data.quote?.current_price ??
         (candlesRef.current.length ? num(candlesRef.current[candlesRef.current.length - 1].close) : null);
       const { support, resistance } = selectNearestLevels(data.levels, lastPx);
-      if (support != null) add(support, "rgba(34,197,94,0.75)", "Support", LineStyle.Dashed, 2);
-      if (resistance != null) add(resistance, "rgba(239,68,68,0.75)", "Resistance", LineStyle.Dashed, 2);
+      if (support != null) add(support, "rgba(34,197,94,0.5)", "Support", LineStyle.Dashed, 1);
+      if (resistance != null) add(resistance, "rgba(239,68,68,0.5)", "Resistance", LineStyle.Dashed, 1);
     }
 
-    if (enabled.orderBlocks) {
-      for (const ob of selectActiveOrderBlocks(data.orderBlocks, showHistorical)) {
-        const bull = ob.type.toLowerCase().includes("bull");
-        const c = bull ? "rgba(34,197,94,0.75)" : "rgba(168,85,247,0.8)";
-        add(num(ob.zone_high), c, bull ? "OB High" : "OB High", LineStyle.Dotted, 2);
-        add(num(ob.zone_low), c, bull ? "Bull OB" : "Bear OB", LineStyle.Dotted, 2);
-      }
-    }
-
-    if (enabled.fvg) {
-      for (const g of selectFreshFvgs(data.fvgs, showHistorical)) {
-        const bull = g.type.toLowerCase().includes("bull");
-        const c = bull ? "rgba(34,211,238,0.85)" : "rgba(56,189,248,0.8)";
-        add(num(g.gap_high), c, "", LineStyle.SparseDotted, 2);
-        add(num(g.gap_low), c, bull ? "Bull FVG" : "Bear FVG", LineStyle.SparseDotted, 2);
-      }
-    }
+    // OB + FVG are shaded zones (see zones effect) — no label lines here.
 
     if (enabled.sweeps) {
       for (const s of selectCurrentSweeps(data.sweeps, showHistorical)) {
         const bull = s.type.toLowerCase().includes("bull");
         add(
           num(s.sweep_level),
-          bull ? "rgba(250,204,21,0.9)" : "rgba(244,114,182,0.9)",
+          bull ? "rgba(250,204,21,0.55)" : "rgba(244,114,182,0.55)",
           "Sweep",
-          LineStyle.LargeDashed,
-          2,
+          LineStyle.SparseDotted,
+          1,
         );
       }
     }
 
     if (enabled.priceReferences && data.quote) {
       const q = data.quote;
-      add(q.current_price, "rgba(79,124,255,0.95)", "Last", LineStyle.Solid, 2);
-      add(q.day_high, "rgba(34,197,94,0.75)", "Day High", LineStyle.Dashed, 1);
-      add(q.day_low, "rgba(239,68,68,0.75)", "Day Low", LineStyle.Dashed, 1);
-      add(q.prev_day_high, "rgba(34,197,94,0.45)", "Prev High", LineStyle.Dotted, 1);
-      add(q.prev_day_low, "rgba(239,68,68,0.45)", "Prev Low", LineStyle.Dotted, 1);
-      add(q.prev_close, "rgba(148,163,184,0.85)", "Prev Close", LineStyle.LargeDashed, 1);
-      add(q.day_open, "rgba(250,204,21,0.85)", "Open", LineStyle.Solid, 1);
-      add(q.vwap, "rgba(168,85,247,0.9)", "VWAP", LineStyle.Solid, 2);
+      add(q.current_price, "rgba(79,124,255,0.9)", "Last", LineStyle.Solid, 1);
+      add(q.day_high, "rgba(34,197,94,0.4)", "Day High", LineStyle.Dotted, 1);
+      add(q.day_low, "rgba(239,68,68,0.4)", "Day Low", LineStyle.Dotted, 1);
+      add(q.prev_close, "rgba(148,163,184,0.5)", "Prev Close", LineStyle.LargeDashed, 1);
+      add(q.vwap, "rgba(168,85,247,0.6)", "VWAP", LineStyle.Solid, 1);
     }
 
     if (enabled.tradeSetups) {
       const { predictive: plan } = selectTradePlan(data.predictive, data.setups);
       // WAIT / no actionable plan → draw nothing.
       if (plan) {
-        const buy = plan.direction === "buy";
-        add(
-          plan.entryHigh,
-          buy ? "rgba(34,197,94,0.85)" : "rgba(239,68,68,0.85)",
-          buy ? "Buy Zone" : "Sell Zone",
-          LineStyle.Solid,
-          2,
-        );
-        add(plan.entryLow, buy ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)", "", LineStyle.Dotted, 1);
         add(plan.entry, "#4f7cff", "Entry", LineStyle.Solid, 2);
-        add(plan.stop, "#ef4444", "Stop", LineStyle.Solid, 2);
-        add(plan.target1, "rgba(56,189,248,0.95)", "TP1", LineStyle.Solid, 2);
-        if (plan.target2 != null) add(plan.target2, "rgba(56,189,248,0.7)", "TP2", LineStyle.Dashed, 1);
-        if (plan.target3 != null) add(plan.target3, "rgba(56,189,248,0.45)", "TP3", LineStyle.Dotted, 1);
+        add(plan.stop, "rgba(239,68,68,0.9)", "Stop", LineStyle.Solid, 1);
+        add(plan.target1, "rgba(56,189,248,0.9)", "TP1", LineStyle.Solid, 1);
+        if (plan.target2 != null) add(plan.target2, "rgba(56,189,248,0.6)", "TP2", LineStyle.Dashed, 1);
+        if (plan.target3 != null) add(plan.target3, "rgba(56,189,248,0.4)", "TP3", LineStyle.Dotted, 1);
       }
     }
   }, [enabled, data, showHistorical, chartGeneration]);
 
+  // Shaded zones: Order Blocks + FVG + entry zone as quiet rectangles.
+  useEffect(() => {
+    const zonesApi = zonesRef.current;
+    if (!zonesApi) return;
+    const bars = candlesRef.current;
+    const zones: PriceZone[] = [];
+
+    if (enabled.orderBlocks) {
+      for (const ob of selectActiveOrderBlocks(data.orderBlocks, showHistorical)) {
+        const bull = ob.type.toLowerCase().includes("bull");
+        zones.push({
+          id: `ob-${ob.order_block_id}`,
+          priceHigh: num(ob.zone_high),
+          priceLow: num(ob.zone_low),
+          timeStart: bars.length ? nearestCandleTime(bars, ob.created_at) : null,
+          fillColor: bull ? "rgba(34,197,94,0.08)" : "rgba(168,85,247,0.08)",
+          borderColor: bull ? "rgba(34,197,94,0.28)" : "rgba(168,85,247,0.28)",
+          label: bull ? "OB · Demand" : "OB · Supply",
+          labelColor: bull ? "rgba(134,239,172,0.75)" : "rgba(216,180,254,0.75)",
+        });
+      }
+    }
+
+    if (enabled.fvg) {
+      for (const g of selectFreshFvgs(data.fvgs, showHistorical)) {
+        const bull = g.type.toLowerCase().includes("bull");
+        zones.push({
+          id: `fvg-${g.fvg_id}`,
+          priceHigh: num(g.gap_high),
+          priceLow: num(g.gap_low),
+          timeStart: bars.length ? nearestCandleTime(bars, g.created_at) : null,
+          fillColor: bull ? "rgba(34,211,238,0.06)" : "rgba(56,189,248,0.06)",
+          borderColor: bull ? "rgba(34,211,238,0.22)" : "rgba(56,189,248,0.22)",
+          label: "FVG",
+          labelColor: "rgba(165,243,252,0.7)",
+        });
+      }
+    }
+
+    if (enabled.tradeSetups) {
+      const { predictive: plan } = selectTradePlan(data.predictive, data.setups);
+      if (plan) {
+        const buy = plan.direction === "buy";
+        zones.push({
+          id: "entry-zone",
+          priceHigh: Math.max(plan.entryLow, plan.entryHigh),
+          priceLow: Math.min(plan.entryLow, plan.entryHigh),
+          timeStart: null,
+          fillColor: buy ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
+          borderColor: buy ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)",
+          label: buy ? "Buy Zone" : "Sell Zone",
+          labelColor: buy ? "rgba(134,239,172,0.8)" : "rgba(252,165,165,0.8)",
+        });
+      }
+    }
+
+    zonesApi.setZones(zones);
+  }, [enabled, data, candles, showHistorical, chartGeneration]);
+
+  // Legend only for actionable BUY/SELL history — WAIT never paints on the chart.
+  const actionableAnnotations = selectAnnotations(data.annotations);
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
       {enabled.tradeSetups && data.predictive && <PlanHud plan={data.predictive} />}
-      {enabled.tradeSetups && !data.predictive && (data.annotations?.length ?? 0) > 0 && (
-        <AnnotationLegend annotations={data.annotations!.slice(-3).reverse()} />
+      {enabled.tradeSetups && !data.predictive && actionableAnnotations.length > 0 && (
+        <AnnotationLegend annotations={actionableAnnotations.slice(-2).reverse()} />
       )}
     </div>
   );

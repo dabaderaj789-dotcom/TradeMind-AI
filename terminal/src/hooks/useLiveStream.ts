@@ -48,10 +48,12 @@ export function useLiveStream(opts: {
       onTick: (tick) => {
         setStatus("live", { lastTickAt: tick.ts, error: null });
         // Soft-update the last candle close so the UI moves without a full refetch.
+        // Never let a stale quote tick repaint a candle that is newer than the tick.
         qc.setQueryData<CandleList>(qk.candles(symbolId, timeframe), (prev) => {
           if (!prev?.items?.length) return prev;
           const items = [...prev.items];
           const last = { ...items[items.length - 1] };
+          if (Number.isFinite(tick.ts) && tick.ts < Date.parse(last.open_time)) return prev;
           const px = tick.price;
           last.close = px;
           last.high = Math.max(Number(last.high), px);
@@ -61,6 +63,7 @@ export function useLiveStream(opts: {
         });
         qc.setQueryData<MarketQuote>(qk.quote(symbolId), (prev) => {
           if (!prev) return prev;
+          if (Number.isFinite(tick.ts) && tick.ts < Date.parse(prev.last_updated)) return prev;
           const px = tick.price;
           const dayChange = px - prev.prev_close;
           const dayChangePct = prev.prev_close ? (dayChange / prev.prev_close) * 100 : 0;

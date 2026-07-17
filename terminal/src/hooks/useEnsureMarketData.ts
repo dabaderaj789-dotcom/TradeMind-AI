@@ -24,6 +24,10 @@ const ANALYSIS_PLUGINS = [
 export type EnsureStatus = "idle" | "downloading" | "analyzing" | "ready" | "error";
 
 const inFlight = new Map<string, Promise<void>>();
+// Stale-data refreshes must not loop when the provider has nothing newer
+// (weekend equity sessions, provider lag) — enforce a per-key cooldown.
+const lastCompleted = new Map<string, number>();
+const ENSURE_COOLDOWN_MS = 5 * 60_000;
 
 async function runEnsure(symbolId: string, timeframe: string): Promise<void> {
   await endpoints.downloadCandles({
@@ -82,6 +86,10 @@ export function useEnsureMarketData(
 
     const key = `${symbolId}:${timeframe}`;
     if (lastKey.current === key && (status === "downloading" || status === "analyzing")) return;
+    if (Date.now() - (lastCompleted.get(key) ?? 0) < ENSURE_COOLDOWN_MS) {
+      setStatus((s) => (s === "error" ? s : "ready"));
+      return;
+    }
     lastKey.current = key;
 
     let cancelled = false;
@@ -97,6 +105,7 @@ export function useEnsureMarketData(
         }
         setStatus("analyzing");
         await pending;
+        lastCompleted.set(key, Date.now());
         if (cancelled) return;
         await Promise.all([
           qc.invalidateQueries({ queryKey: qk.candles(symbolId, timeframe) }),
