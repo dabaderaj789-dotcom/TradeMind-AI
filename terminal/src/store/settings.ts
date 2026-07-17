@@ -71,12 +71,13 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "trademind.settings",
-      version: 5,
+      version: 6,
       migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
         let overlays = { ...DEFAULT_OVERLAYS, ...(p.overlays ?? {}) };
-        // v5: institutional chart clarity defaults (S/R + sweeps on; clutter off elsewhere).
-        if (fromVersion < 5) {
+        // v6: repair stale sessions that persisted all core overlays as disabled.
+        // This is a one-time UI-state migration; users can still toggle them afterward.
+        if (fromVersion < 6) {
           overlays = {
             ...overlays,
             marketStructure: true,
