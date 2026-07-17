@@ -13,7 +13,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { annotationCaption, type ChartAnnotation } from "../../lib/decision";
 import type { PredictivePlan } from "../../lib/predictiveSignal";
 import { isNum, num } from "../../lib/format";
@@ -98,6 +98,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
   const lineRefs = useRef<Partial<Record<"ema" | "sma" | "vwap", ISeriesApi<"Line">>>>({});
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const candlesRef = useRef<Candle[]>(candles);
+  const [chartGeneration, setChartGeneration] = useState(0);
   candlesRef.current = candles;
   const showHistorical = useSettings((s) => s.showHistoricalOverlays);
 
@@ -137,6 +138,9 @@ export function TerminalChart({ candles, enabled, data }: Props) {
     chartRef.current = chart;
     candleRef.current = candleSeries;
     volumeRef.current = volumeSeries;
+    // Replay data/overlay effects after the imperative chart refs exist.
+    // This also covers React StrictMode's setup → cleanup → setup lifecycle.
+    setChartGeneration((generation) => generation + 1);
 
     return () => {
       chart.remove();
@@ -171,7 +175,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
       chartRef.current?.timeScale().fitContent();
     }
     (candleRef.current as unknown as { __tmLen?: number }).__tmLen = candleData.length;
-  }, [candles]);
+  }, [candles, chartGeneration]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -204,7 +208,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
         delete lineRefs.current[cfg.id];
       }
     }
-  }, [enabled, data]);
+  }, [enabled, data, chartGeneration]);
 
   // Markers: current BOS / CHoCH / AI decision only (decluttered).
   useEffect(() => {
@@ -288,7 +292,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
     markers.sort((a, b) => (a.time as number) - (b.time as number));
     const cleaned = declutterMarkers(markers, 3) as SeriesMarker<Time>[];
     series.setMarkers(cleaned);
-  }, [enabled, data, candles, showHistorical]);
+  }, [enabled, data, candles, showHistorical, chartGeneration]);
 
   // Price lines: one active OB, one fresh FVG, current trade plan.
   useEffect(() => {
@@ -389,7 +393,7 @@ export function TerminalChart({ candles, enabled, data }: Props) {
         if (plan.target3 != null) add(plan.target3, "rgba(56,189,248,0.45)", "TP3", LineStyle.Dotted, 1);
       }
     }
-  }, [enabled, data, showHistorical]);
+  }, [enabled, data, showHistorical, chartGeneration]);
 
   return (
     <div className="relative h-full w-full">
