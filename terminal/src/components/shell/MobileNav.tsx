@@ -1,5 +1,6 @@
 import { NavLink, useLocation, useParams } from "react-router-dom";
 import { usePrefs } from "../../store/prefs";
+import { useUniverseSymbols } from "../../hooks/useUniverseSymbols";
 import { cx } from "../../lib/format";
 import type { ReactNode } from "react";
 
@@ -8,7 +9,8 @@ export function MobileNav() {
   const location = useLocation();
   const recents = usePrefs((s) => s.recents);
   const watchlist = usePrefs((s) => s.watchlist);
-  const chartId = symbolId || recents[0]?.id || watchlist[0]?.id;
+  const { ready } = useUniverseSymbols();
+  const chartId = symbolId || recents[0]?.id || watchlist[0]?.id || ready[0]?.lite?.id;
   const chartTo = chartId ? `/terminal/${chartId}` : "/markets";
 
   const items: {
@@ -18,7 +20,7 @@ export function MobileNav() {
     end?: boolean;
     active?: boolean;
   }[] = [
-    { to: "/", label: "Home", icon: <IconHome />, end: true },
+    { to: "/", label: "Dashboard", icon: <IconHome />, end: true },
     { to: "/markets", label: "Markets", icon: <IconMarkets /> },
     {
       to: chartTo,

@@ -1,4 +1,4 @@
-import { TIMEFRAME_LABELS, TIMEFRAMES, type Timeframe } from "../../lib/endpoints";
+import { PRIMARY_TIMEFRAMES, TIMEFRAME_LABELS, type Timeframe } from "../../lib/endpoints";
 import { cx } from "../../lib/format";
 
 export function TimeframeSelector({
@@ -11,18 +11,18 @@ export function TimeframeSelector({
   compact?: boolean;
 }) {
   return (
-    <div className={cx("inline-flex max-w-full overflow-x-auto", compact && "scrollbar-none")}>
-      {TIMEFRAMES.map((tf) => (
+    <div className={cx("inline-flex items-center gap-0.5", compact && "scrollbar-none")}>
+      {PRIMARY_TIMEFRAMES.map((tf) => (
         <button
           key={tf}
           type="button"
           onClick={() => onChange(tf)}
           className={cx(
-            "shrink-0 font-medium tracking-wide transition-all duration-200 ease-terminal",
-            compact ? "rounded px-1.5 py-1 text-[10px]" : "rounded-md px-2.5 py-1.5 text-[11px]",
+            "shrink-0 font-semibold tracking-wide transition-all duration-150",
+            compact ? "rounded px-2.5 py-1 text-[11px]" : "rounded-md px-3.5 py-1.5 text-xs",
             value === tf
-              ? "bg-elevated text-content shadow-[inset_0_-1px_0_0_rgb(var(--c-brand))]"
-              : "text-faint hover:bg-elevated/50 hover:text-muted",
+              ? "bg-brand/15 text-brand ring-1 ring-brand/35"
+              : "text-faint hover:bg-elevated hover:text-content",
           )}
         >
           {TIMEFRAME_LABELS[tf]}

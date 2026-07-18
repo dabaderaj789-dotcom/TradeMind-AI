@@ -56,7 +56,7 @@ export const LAYOUT_OPTIONS: { id: LayoutId; label: string; short: string }[] = 
   { id: "8", label: "8 Charts", short: "8" },
 ];
 
-function makePane(id: string, symbolId = "", timeframe: Timeframe = "1h"): ChartPaneState {
+function makePane(id: string, symbolId = "", timeframe: Timeframe = "15m"): ChartPaneState {
   return {
     id,
     symbolId,
@@ -81,7 +81,7 @@ export const useWorkspace = create<WorkspaceState>()(
       panes: [makePane("pane-1")],
       activePaneId: "pane-1",
       aiPanelOpen: true,
-      watchlistOpen: false,
+      watchlistOpen: true,
       bottomOpen: false,
       fullscreen: false,
       setLayout: (layout) =>
@@ -130,7 +130,7 @@ export const useWorkspace = create<WorkspaceState>()(
     }),
     {
       name: "trademind.workspace",
-      version: 3,
+      version: 4,
       partialize: (s) => ({
         layout: s.layout,
         panes: s.panes,
@@ -142,15 +142,16 @@ export const useWorkspace = create<WorkspaceState>()(
         const p = (persisted ?? {}) as Partial<WorkspaceState>;
         const panes = (p.panes ?? [makePane("pane-1")]).map((pane) => ({
           ...pane,
+          timeframe: (["1m", "5m", "15m"].includes(pane.timeframe) ? pane.timeframe : "15m") as Timeframe,
           overlays: normalizeOverlays(pane.overlays as Partial<Record<string, boolean>>),
         }));
         return {
           ...p,
           panes,
-          layout: p.layout ?? "1",
+          layout: "1",
           activePaneId: p.activePaneId ?? panes[0]?.id ?? "pane-1",
-          // v3: slightly more chart by default
-          aiPanelOpen: fromVersion < 3 ? (p.aiPanelOpen ?? true) : (p.aiPanelOpen ?? true),
+          aiPanelOpen: p.aiPanelOpen ?? true,
+          watchlistOpen: true,
         } as WorkspaceState;
       },
     },

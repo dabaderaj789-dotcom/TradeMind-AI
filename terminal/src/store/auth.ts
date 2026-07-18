@@ -9,40 +9,37 @@ export interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
-  login: (username: string) => void;
+  login: (email: string, password: string) => { ok: true } | { ok: false; error: string };
   logout: () => void;
 }
 
-/**
- * The TradeMind backend does not (yet) expose an authentication endpoint, so the
- * terminal manages a local session. `authService` is the single seam to swap in a
- * real login API later without touching the UI.
- */
-export const authService = {
-  async login(username: string, _password: string): Promise<AuthUser> {
-    // Placeholder for a real POST /auth/login call.
-    return {
-      username,
-      displayName: username.charAt(0).toUpperCase() + username.slice(1),
-      role: "Trader",
-    };
-  },
-};
+/** Temporary personal gate — frontend only. */
+export const TEMP_LOGIN = {
+  email: "trademind@ai.com",
+  password: "1234",
+} as const;
 
 export const useAuth = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      login: (username) =>
+      login: (email, password) => {
+        const e = email.trim().toLowerCase();
+        const p = password;
+        if (e !== TEMP_LOGIN.email || p !== TEMP_LOGIN.password) {
+          return { ok: false, error: "Invalid email or password." };
+        }
         set({
           user: {
-            username,
-            displayName: username.charAt(0).toUpperCase() + username.slice(1),
+            username: TEMP_LOGIN.email,
+            displayName: "Trader",
             role: "Trader",
           },
-        }),
+        });
+        return { ok: true };
+      },
       logout: () => set({ user: null }),
     }),
-    { name: "trademind.auth" },
+    { name: "trademind.auth.v3" },
   ),
 );

@@ -189,6 +189,9 @@ export interface OhlcCompareResult {
 export const TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"] as const;
 export type Timeframe = (typeof TIMEFRAMES)[number];
 
+/** Primary trading timeframes shown in the V3 toolbar. */
+export const PRIMARY_TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m"];
+
 /** Display labels for toolbar (TradingView-style). */
 export const TIMEFRAME_LABELS: Record<Timeframe, string> = {
   "1m": "1m",

@@ -43,7 +43,7 @@ const DEFAULT_FILTERS: ScannerFilters = {
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
-      defaultTimeframe: "1h",
+      defaultTimeframe: "15m",
       overlays: { ...DEFAULT_OVERLAYS },
       theme: "dark",
       refreshInterval: 20_000,
@@ -60,7 +60,7 @@ export const useSettings = create<SettingsState>()(
       setTvCompareMode: (on) => set({ tvCompareMode: on }),
       reset: () =>
         set({
-          defaultTimeframe: "1h",
+          defaultTimeframe: "15m",
           overlays: { ...DEFAULT_OVERLAYS },
           theme: "dark",
           refreshInterval: 20_000,

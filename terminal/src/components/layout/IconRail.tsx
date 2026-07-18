@@ -1,26 +1,24 @@
-import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
+import { NavLink, useLocation, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { cx } from "../../lib/format";
 import { usePrefs } from "../../store/prefs";
-import { useWorkspace } from "../../store/workspace";
+import { useUniverseSymbols } from "../../hooks/useUniverseSymbols";
 
 export function IconRail() {
-  const navigate = useNavigate();
   const location = useLocation();
   const { symbolId } = useParams();
   const recents = usePrefs((s) => s.recents);
   const watchlist = usePrefs((s) => s.watchlist);
-  const watchlistOpen = useWorkspace((s) => s.watchlistOpen);
-  const setWatchlistOpen = useWorkspace((s) => s.setWatchlistOpen);
+  const { ready } = useUniverseSymbols();
   const onTerminal = location.pathname.startsWith("/terminal");
-  const chartId = symbolId || recents[0]?.id || watchlist[0]?.id;
+  const chartId = symbolId || recents[0]?.id || watchlist[0]?.id || ready[0]?.lite?.id;
   const chartTo = chartId ? `/terminal/${chartId}` : "/markets";
 
   return (
-    <aside className="terminal-rail hidden h-full w-14 shrink-0 flex-col items-center border-r border-subtle/40 bg-surface/90 py-3 lg:flex">
+    <aside className="terminal-rail hidden h-full w-[52px] shrink-0 flex-col items-center border-r border-subtle/40 bg-surface py-3 lg:flex">
       <NavLink
-        to={chartTo}
-        className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-brand/90 to-info/70 text-bg shadow-glow"
+        to="/"
+        className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-bg shadow-glow"
         title="TradeMind AI"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -29,27 +27,16 @@ export function IconRail() {
         </svg>
       </NavLink>
 
-      <nav className="flex flex-1 flex-col items-center gap-1.5">
-        <RailLink to="/" end label="Home" icon={<IconHome />} />
-        <RailLink to={chartTo} label="Chart" icon={<IconChart />} active={onTerminal} />
+      <nav className="flex flex-1 flex-col items-center gap-1">
+        <RailLink to="/" end label="Dashboard" icon={<IconHome />} />
         <RailLink to="/markets" label="Markets" icon={<IconMarkets />} />
-        <RailLink to="/scanner" label="Scanner" icon={<IconGrid />} />
-        <button
-          type="button"
-          title="Watchlist"
-          className={cx("v2-rail-btn", onTerminal && watchlistOpen && "v2-rail-btn-active")}
-          onClick={() => {
-            if (onTerminal) setWatchlistOpen(!watchlistOpen);
-            else navigate("/watchlist");
-          }}
-        >
-          <IconStar />
-        </button>
+        <RailLink to={chartTo} label="Chart" icon={<IconChart />} active={onTerminal} />
+        <RailLink to="/watchlist" label="Watchlist" icon={<IconStar />} />
         <div className="flex-1" />
         <RailLink to="/settings" label="Settings" icon={<IconGear />} />
       </nav>
 
-      <div className="mt-2 text-[8px] font-semibold tracking-[0.2em] text-faint">V2</div>
+      <div className="mt-2 text-[8px] font-semibold tracking-[0.2em] text-faint">V3</div>
     </aside>
   );
 }
@@ -72,9 +59,7 @@ function RailLink({
       to={to}
       end={end}
       title={label}
-      className={({ isActive }) =>
-        cx("v2-rail-btn", (active ?? isActive) && "v2-rail-btn-active")
-      }
+      className={({ isActive }) => cx("v2-rail-btn", (active ?? isActive) && "v2-rail-btn-active")}
     >
       {icon}
     </NavLink>
@@ -107,17 +92,6 @@ function IconMarkets() {
       <path d="M7 14v4" />
       <path d="M12 10v8" />
       <path d="M17 6v12" />
-    </svg>
-  );
-}
-
-function IconGrid() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
     </svg>
   );
 }

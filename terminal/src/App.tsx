@@ -7,7 +7,6 @@ import { useThemeEffect } from "./hooks/useTheme";
 import { useAuth } from "./store/auth";
 
 const HomePage = lazy(() => import("./pages/HomePage").then((m) => ({ default: m.HomePage })));
-const ScannerPage = lazy(() => import("./pages/ScannerPage").then((m) => ({ default: m.ScannerPage })));
 const TerminalPage = lazy(() => import("./pages/TerminalPage").then((m) => ({ default: m.TerminalPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const MarketsPage = lazy(() => import("./pages/MarketsPage").then((m) => ({ default: m.MarketsPage })));
@@ -35,14 +34,6 @@ export default function App() {
           element={
             <Suspense fallback={<PageFallback />}>
               <HomePage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="scanner"
-          element={
-            <Suspense fallback={<PageFallback />}>
-              <ScannerPage />
             </Suspense>
           }
         />
@@ -78,6 +69,7 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route path="scanner" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

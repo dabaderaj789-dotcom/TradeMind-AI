@@ -1,120 +1,155 @@
-import { useMemo } from "react";
-import {
-  useAnalysis,
-  useCandles,
-  useFvgs,
-  useLevels,
-  useMarketQuote,
-  useOrderBlocks,
-  useStructureEvents,
-  useSweeps,
-} from "../../hooks/queries";
 import { useDecision } from "../../hooks/useDecision";
-import { buildAnalystBrief } from "../../lib/analystBrief";
-import { titleCase } from "../../lib/format";
-import { resolvePrice } from "../../lib/marketPrice";
-import { Badge, Card } from "../common/primitives";
-import { AnalystBriefCard } from "./AnalystBriefCard";
-import { PredictiveSignalCard } from "./PredictiveSignalCard";
-import { OhlcComparePanel, QuoteVerifyPanel } from "../chart/OhlcComparePanel";
-import { useSettings } from "../../store/settings";
+import { fmtPrice } from "../../lib/format";
+import { Badge, Card, Skeleton } from "../common/primitives";
+import type { PredictivePlan } from "../../lib/predictiveSignal";
+import type { AiDecision } from "../../lib/decision";
 
-/** Terminal V2 AI rail — institutional brief first. */
+/** V3 AI rail — BUY shows plan levels; WAIT shows institutional reasoning only. */
 export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
-  const { decision, predictive, isLoading, trend } = useDecision(id, tf);
-  const tvCompareMode = useSettings((s) => s.tvCompareMode);
-  const levels = useLevels(id, tf);
-  const events = useStructureEvents(id, tf);
-  const ms = useAnalysis(id, tf, "market_structure", true);
-  const ob = useOrderBlocks(id, tf);
-  const fvg = useFvgs(id, tf);
-  const sweeps = useSweeps(id, tf);
-  const quote = useMarketQuote(id);
-  const candles = useCandles(id, tf);
-
-  const swings = useMemo(() => {
-    const items = ms.data?.items ?? [];
-    return items
-      .filter((b) => b.values.swing_type)
-      .slice(-6)
-      .reverse()
-      .map((b) => ({
-        time: b.open_time,
-        type: String(b.values.swing_type),
-      }));
-  }, [ms.data]);
-
-  const lastPrice = useMemo(() => {
-    const resolved = resolvePrice(quote.data ?? null, candles.data?.items ?? []);
-    return resolved.price;
-  }, [quote.data, candles.data]);
-
-  const brief = useMemo(
-    () =>
-      buildAnalystBrief({
-        decision,
-        predictive,
-        trend,
-        levels: levels.data,
-        events: events.data,
-        orderBlocks: ob.data?.items,
-        fvgs: fvg.data?.items,
-        sweeps: sweeps.data?.items,
-        swings,
-        lastPrice,
-      }),
-    [decision, predictive, trend, levels.data, events.data, ob.data, fvg.data, sweeps.data, swings, lastPrice],
-  );
+  const { decision, predictive, isLoading } = useDecision(id, tf);
+  const actionable =
+    !!decision &&
+    (decision.kind === "BUY" ||
+      decision.kind === "STRONG BUY" ||
+      decision.kind === "SELL" ||
+      decision.kind === "STRONG SELL");
 
   return (
-    <div className="h-full space-y-3 overflow-auto p-3.5 ai-panel-scroll animate-fade-in">
-      <div className="px-0.5 pb-1">
-        <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-faint">Analyst</div>
+    <div className="h-full space-y-3 overflow-auto p-3 ai-panel-scroll animate-fade-in">
+      <div className="px-0.5 pb-0.5">
+        <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-faint">AI Desk</div>
         <div className="mt-1 flex items-center gap-2">
-          <span className="font-display text-sm font-semibold tracking-tight text-content">
-            Market brief
-          </span>
+          <span className="font-display text-sm font-semibold tracking-tight text-content">Decision</span>
           {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
         </div>
       </div>
 
-      <AnalystBriefCard brief={brief} loading={isLoading} />
-
-      {predictive && <PredictiveSignalCard plan={predictive} loading={isLoading} />}
-
-      {decision && decision.qualityChecks.length > 0 && (
-        <Card
-          title="Quality gates"
-          subtitle={`${decision.qualityChecks.filter((c) => c.passed).length}/${decision.qualityChecks.length} cleared`}
-        >
-          <ul className="space-y-1.5">
-            {decision.qualityChecks.slice(0, 8).map((c) => (
-              <li key={c.id} className="flex items-start gap-2 text-[11px]">
-                <span className={c.passed ? "shrink-0 text-bull" : "shrink-0 text-warn"}>
-                  {c.passed ? "●" : "○"}
-                </span>
-                <span className="min-w-0">
-                  <span className="text-content">{c.label}</span>
-                  <span className="text-faint"> — {c.detail}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {decision.mtf.summary && (
-            <p className="mt-3 text-[11px] leading-relaxed text-muted">
-              Multi-timeframe: {decision.mtf.summary}
-              {trend ? ` · Phase ${titleCase(trend.market_phase)}` : ""}
-            </p>
-          )}
+      {isLoading && !decision ? (
+        <Card title="Loading">
+          <Skeleton className="h-36" />
         </Card>
+      ) : actionable && decision ? (
+        <ActionPlanCard decision={decision} plan={predictive} />
+      ) : (
+        <WaitReasoningCard decision={decision} />
+      )}
+    </div>
+  );
+}
+
+function ActionPlanCard({
+  decision,
+  plan,
+}: {
+  decision: AiDecision;
+  plan: PredictivePlan | null;
+}) {
+  const buy = decision.kind.includes("BUY");
+  return (
+    <Card
+      title={buy ? "Trade plan · BUY" : "Trade plan · SELL"}
+      actions={<Badge tone={buy ? "bull" : "bear"}>{Math.round(decision.confidence)}%</Badge>}
+    >
+      <div className="space-y-0">
+        <LevelRow label="Entry" value={plan ? fmtPrice(plan.entry) : "—"} accent="brand" />
+        <LevelRow label="Stop Loss" value={plan ? fmtPrice(plan.stop) : "—"} accent="bear" />
+        <LevelRow label="TP1" value={plan ? fmtPrice(plan.target1) : "—"} accent="info" />
+        <LevelRow
+          label="TP2"
+          value={plan?.target2 != null ? fmtPrice(plan.target2) : "—"}
+          accent="info"
+        />
+        <LevelRow
+          label="TP3"
+          value={plan?.target3 != null ? fmtPrice(plan.target3) : "—"}
+          accent="info"
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Metric label="Confidence" value={`${Math.round(decision.confidence)}%`} />
+        <Metric
+          label="Institutional Score"
+          value={`${decision.institutional.score}`}
+          sub={decision.institutional.grade}
+        />
+      </div>
+
+      {plan?.setupType && (
+        <p className="mt-3 text-[11px] leading-relaxed text-muted">
+          {plan.setupType.replace(/_/g, " ")}
+          {plan.state ? ` · ${plan.state}` : ""}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function WaitReasoningCard({ decision }: { decision: AiDecision | null }) {
+  if (!decision) {
+    return (
+      <Card title="Institutional reasoning">
+        <p className="text-sm text-muted">Select a symbol to load the AI desk.</p>
+      </Card>
+    );
+  }
+
+  const reason =
+    decision.explainability?.whyNow ||
+    decision.reasoning ||
+    "Standing aside — conditions are not clear enough to act.";
+
+  return (
+    <Card title="Institutional reasoning" actions={<Badge tone="warn">WAIT</Badge>}>
+      <p className="text-[13px] leading-relaxed text-content">{reason}</p>
+
+      {decision.unlockConditions?.length > 0 && (
+        <ul className="mt-3 space-y-1.5 border-t border-subtle/30 pt-3">
+          {decision.unlockConditions.slice(0, 5).map((u) => (
+            <li key={u} className="flex gap-2 text-[12px] leading-snug text-muted">
+              <span className="shrink-0 text-brand">→</span>
+              <span>{u}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
-      {tvCompareMode && (
-        <>
-          <OhlcComparePanel symbolId={id} timeframe={tf} />
-          <QuoteVerifyPanel symbolId={id} />
-        </>
-      )}
+      <div className="mt-3 rounded-lg bg-elevated/50 px-3 py-2.5 text-center">
+        <div className="text-[9px] uppercase tracking-[0.12em] text-faint">Institutional Score</div>
+        <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-content">
+          {decision.institutional.score}
+        </div>
+        <div className="text-[10px] text-faint">{decision.institutional.grade}</div>
+      </div>
+    </Card>
+  );
+}
+
+function LevelRow({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: "brand" | "bear" | "info";
+}) {
+  const color =
+    accent === "brand" ? "text-brand" : accent === "bear" ? "text-bear" : "text-info";
+  return (
+    <div className="flex items-center justify-between border-b border-subtle/25 py-2.5 last:border-0">
+      <span className="text-xs text-faint">{label}</span>
+      <span className={`font-mono text-sm font-semibold tabular-nums ${color}`}>{value}</span>
+    </div>
+  );
+}
+
+function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg bg-elevated/50 px-2.5 py-2.5 text-center">
+      <div className="text-[9px] uppercase tracking-[0.12em] text-faint">{label}</div>
+      <div className="mt-1 font-mono text-base font-semibold tabular-nums text-content">{value}</div>
+      {sub && <div className="mt-0.5 text-[10px] text-faint">{sub}</div>}
     </div>
   );
 }

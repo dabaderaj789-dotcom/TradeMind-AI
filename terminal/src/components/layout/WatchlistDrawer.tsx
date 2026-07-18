@@ -1,99 +1,48 @@
-/**
- * Terminal V2 — collapsible watchlist / favorites / recents drawer.
- * Uses existing prefs store; no backend changes.
- */
-
-import { useNavigate } from "react-router-dom";
-import { SidebarSearch } from "../sidebar/SidebarSearch";
-import { SymbolRow } from "../sidebar/SymbolRow";
+import { useEffect } from "react";
+import { useParams } from "react-router-dom";
+import { useUniverseSymbols } from "../../hooks/useUniverseSymbols";
+import { useSelectSymbol } from "../../hooks/useSelectSymbol";
 import { usePrefs } from "../../store/prefs";
-import { useWorkspace } from "../../store/workspace";
+import { UniverseWatchRow } from "../markets/UniverseQuoteRow";
 
+/** Desktop left rail — Angel One–style always-on watchlist of the 4 symbols. */
 export function WatchlistDrawer() {
-  const navigate = useNavigate();
+  const { symbolId } = useParams();
+  const { items, ready, isLoading } = useUniverseSymbols();
+  const select = useSelectSymbol();
+  const addWatch = usePrefs((s) => s.addWatch);
   const watchlist = usePrefs((s) => s.watchlist);
-  const favorites = usePrefs((s) => s.favorites);
-  const recents = usePrefs((s) => s.recents);
-  const removeWatch = usePrefs((s) => s.removeWatch);
-  const setWatchlistOpen = useWorkspace((s) => s.setWatchlistOpen);
+
+  // Keep prefs watchlist synced to universe for Chart deep-links / mobile.
+  useEffect(() => {
+    for (const u of ready) {
+      if (u.lite && !watchlist.some((w) => w.id === u.lite!.id)) {
+        addWatch(u.lite);
+      }
+    }
+  }, [ready, addWatch, watchlist]);
 
   return (
-    <aside className="v2-drawer flex h-full w-[260px] shrink-0 flex-col animate-slide-in-left">
-      <div className="flex h-12 items-center justify-between border-b border-subtle/30 px-3">
+    <aside className="flex h-full w-[240px] shrink-0 flex-col border-r border-subtle/40 bg-surface/95">
+      <div className="flex h-11 items-center border-b border-subtle/30 px-3">
         <div>
-          <div className="text-[11px] font-semibold tracking-[0.14em] text-faint uppercase">Lists</div>
-          <div className="text-sm font-medium text-content">Watchlist</div>
+          <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-faint">Watchlist</div>
+          <div className="text-sm font-semibold text-content">Markets</div>
         </div>
-        <button type="button" className="btn-chip" onClick={() => setWatchlistOpen(false)} title="Close">
-          ✕
-        </button>
       </div>
-
-      <div className="border-b border-subtle/20 px-3 py-3">
-        <SidebarSearch />
-      </div>
-
-      <div className="min-h-0 flex-1 space-y-5 overflow-auto px-3 py-4">
-        <Section title="Watchlist" count={watchlist.length}>
-          {watchlist.length === 0 ? (
-            <p className="px-1 text-xs leading-relaxed text-faint">
-              Search above or open Markets to pin symbols.
-            </p>
-          ) : (
-            <div className="space-y-0.5">
-              {watchlist.map((s) => (
-                <SymbolRow key={s.id} symbol={s} onRemove={removeWatch} />
-              ))}
-            </div>
-          )}
-        </Section>
-
-        {favorites.length > 0 && (
-          <Section title="Favorites" count={favorites.length}>
-            <div className="space-y-0.5">
-              {favorites.map((s) => (
-                <SymbolRow key={s.id} symbol={s} />
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {recents.length > 0 && (
-          <Section title="Recent" count={recents.length}>
-            <div className="space-y-0.5">
-              {recents.map((s) => (
-                <SymbolRow key={s.id} symbol={s} />
-              ))}
-            </div>
-          </Section>
-        )}
-      </div>
-
-      <div className="border-t border-subtle/30 p-3">
-        <button type="button" className="btn-ghost w-full text-xs" onClick={() => navigate("/markets")}>
-          Browse all markets
-        </button>
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-auto p-2">
+        {isLoading && <p className="px-2 py-4 text-xs text-faint">Loading…</p>}
+        {items.map((u) => (
+          <UniverseWatchRow
+            key={u.code}
+            item={u}
+            active={!!u.lite && u.lite.id === symbolId}
+            onOpen={() => {
+              if (u.lite) select(u.lite);
+            }}
+          />
+        ))}
       </div>
     </aside>
-  );
-}
-
-function Section({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between px-1">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">{title}</span>
-        <span className="font-mono text-[10px] text-faint">{count}</span>
-      </div>
-      {children}
-    </div>
   );
 }

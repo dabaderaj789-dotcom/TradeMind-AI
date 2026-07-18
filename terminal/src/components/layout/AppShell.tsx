@@ -2,7 +2,7 @@ import { Outlet } from "react-router-dom";
 import { IconRail } from "./IconRail";
 import { MobileNav } from "../shell/MobileNav";
 
-/** Terminal V2 shell — icon rail + chart canvas. */
+/** TradeMind Terminal V3 shell — icon rail + native mobile nav. */
 export function AppShell() {
   return (
     <div className="terminal-shell flex h-screen overflow-hidden bg-bg">
