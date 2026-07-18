@@ -16,7 +16,7 @@ interface AuthState {
 /** Temporary personal gate — frontend only. */
 export const TEMP_LOGIN = {
   email: "trademind@ai.com",
-  password: "1234",
+  password: "TradeMind@2026",
 } as const;
 
 export const useAuth = create<AuthState>()(
