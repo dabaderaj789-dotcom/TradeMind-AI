@@ -52,7 +52,7 @@ class ZonesRenderer implements ISeriesPrimitivePaneRenderer {
         ctx.lineWidth = 1;
         ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
         if (r.label && r.h >= 12) {
-          ctx.font = '600 9px "IBM Plex Sans", Inter, system-ui, sans-serif';
+          ctx.font = '600 9px "Sora", system-ui, sans-serif';
           ctx.fillStyle = r.labelColor;
           ctx.textBaseline = "top";
           ctx.fillText(r.label, r.x + 6, r.y + 3);

@@ -1,6 +1,6 @@
 /**
- * Trading Terminal — chart-first professional workspace.
- * Multi-layout charts, fullscreen, auto market-data fill. No trading-engine changes.
+ * TradeMind AI Terminal V2 — chart-first institutional workspace.
+ * Reuses existing API hooks / decision engine. No backend changes.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,7 +10,7 @@ import { ChartPane } from "../components/chart/ChartPane";
 import { LayoutPicker } from "../components/chart/LayoutPicker";
 import { OverlayToggles } from "../components/chart/OverlayToggles";
 import { TimeframeSelector } from "../components/chart/TimeframeSelector";
-import { BottomPanel } from "../components/bottom/BottomPanel";
+import { WatchlistDrawer } from "../components/layout/WatchlistDrawer";
 import { ConnectionStatusChip } from "../components/shell/ConnectionStatus";
 import { TopBarActions } from "../components/layout/TopBarActions";
 import { Badge } from "../components/common/primitives";
@@ -34,11 +34,11 @@ export function TerminalPage() {
   const panes = useWorkspace((s) => s.panes);
   const activePaneId = useWorkspace((s) => s.activePaneId);
   const aiPanelOpen = useWorkspace((s) => s.aiPanelOpen);
-  const bottomOpen = useWorkspace((s) => s.bottomOpen);
+  const watchlistOpen = useWorkspace((s) => s.watchlistOpen);
   const fullscreen = useWorkspace((s) => s.fullscreen);
   const syncPrimarySymbol = useWorkspace((s) => s.syncPrimarySymbol);
   const setAiPanelOpen = useWorkspace((s) => s.setAiPanelOpen);
-  const setBottomOpen = useWorkspace((s) => s.setBottomOpen);
+  const setWatchlistOpen = useWorkspace((s) => s.setWatchlistOpen);
   const setFullscreen = useWorkspace((s) => s.setFullscreen);
   const setPaneTimeframe = useWorkspace((s) => s.setPaneTimeframe);
   const setPaneOverlay = useWorkspace((s) => s.setPaneOverlay);
@@ -91,6 +91,7 @@ export function TerminalPage() {
   const marketLabel = MARKETS.find((m) => m.id === marketCategory)?.label ?? "Market";
   const multi = layout !== "1";
   const compactPanes = layout === "6" || layout === "8";
+  const symbolCode = meta?.symbol_code ?? quote?.symbol_code ?? "Symbol";
 
   const onOverlay = useCallback(
     (id: OverlayId, on: boolean) => {
@@ -99,9 +100,13 @@ export function TerminalPage() {
     [activePane, setPaneOverlay],
   );
 
-  const swipeRef = useSwipePanes(panes.map((p) => p.id), activePaneId, setActivePane, isMobile && panes.length > 1);
+  const swipeRef = useSwipePanes(
+    panes.map((p) => p.id),
+    activePaneId,
+    setActivePane,
+    isMobile && panes.length > 1,
+  );
 
-  // Mobile: one chart at a time (avoids mounting 6–8 charts). Desktop: full layout grid.
   const visiblePanes = isMobile
     ? panes.filter((p) => p.id === activePaneId).length
       ? panes.filter((p) => p.id === activePaneId)
@@ -112,12 +117,12 @@ export function TerminalPage() {
     <div
       ref={swipeRef}
       className={cx(
-        "grid min-h-0 flex-1 gap-1.5",
+        "grid min-h-0 flex-1 gap-px bg-subtle/20",
         isMobile ? "grid-cols-1 grid-rows-1" : layoutGridClass(layout),
       )}
     >
       {visiblePanes.map((pane) => (
-        <div key={pane.id} className="flex h-full min-h-0 min-w-0 flex-col">
+        <div key={pane.id} className="flex h-full min-h-0 min-w-0 flex-col bg-bg">
           <ChartPane
             pane={pane}
             compact={isMobile ? false : compactPanes || multi}
@@ -128,12 +133,28 @@ export function TerminalPage() {
     </div>
   );
 
+  const freshnessChip = bars.length > 0 && (
+    <span
+      className={cx(
+        "rounded px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.08em]",
+        freshness.live
+          ? "bg-bull/10 text-bull"
+          : freshness.tone === "warn"
+            ? "bg-warn/10 text-warn"
+            : "bg-elevated text-faint",
+      )}
+      title={resolved.asOfMs ? `As of ${new Date(resolved.asOfMs).toLocaleTimeString()}` : "No data"}
+    >
+      {freshness.label}
+    </span>
+  );
+
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 z-[60] flex flex-col bg-bg">
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-subtle/30 px-3">
-          <div className="min-w-0 truncate text-sm font-semibold text-content">
-            {meta?.symbol_code ?? quote?.symbol_code ?? activePane?.symbolId ?? "Chart"}
+      <div className="fixed inset-0 z-[60] flex flex-col bg-bg animate-fade-in">
+        <div className="v2-toolbar !h-11">
+          <div className="min-w-0 truncate font-display text-sm font-semibold tracking-tight">
+            {symbolCode}
           </div>
           {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
           {predictive && <Badge tone={predictive.stateTone}>{predictive.state}</Badge>}
@@ -148,32 +169,12 @@ export function TerminalPage() {
           {activePane && <OverlayToggles overlays={activePane.overlays} onChange={onOverlay} />}
           {!isMobile && <LayoutPicker />}
           <ConnectionStatusChip compact />
-          <button
-            type="button"
-            className="btn-chip"
-            onClick={() => setFullscreen(false)}
-            title="Exit fullscreen (Esc)"
-          >
+          <button type="button" className="btn-chip" onClick={() => setFullscreen(false)}>
             Exit
           </button>
         </div>
-        <div className="min-h-0 flex-1 p-1">{chartGrid}</div>
-        {isMobile && panes.length > 1 && (
-          <div className="flex justify-center gap-1.5 pb-3 pt-1">
-            {panes.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                aria-label={`Chart ${p.id}`}
-                className={cx(
-                  "h-1.5 w-1.5 rounded-full transition-colors",
-                  p.id === activePaneId ? "bg-brand" : "bg-subtle",
-                )}
-                onClick={() => setActivePane(p.id)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="min-h-0 flex-1">{chartGrid}</div>
+        {isMobile && panes.length > 1 && <PaneDots panes={panes} active={activePaneId} onSelect={setActivePane} />}
       </div>
     );
   }
@@ -181,24 +182,13 @@ export function TerminalPage() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg">
       {/* Mobile header */}
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle/30 bg-surface/80 px-3 py-2 backdrop-blur-md lg:hidden">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle/30 bg-surface/80 px-3 py-2.5 backdrop-blur-xl lg:hidden">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-content">
-            {meta?.symbol_code ?? quote?.symbol_code ?? "Symbol"}
-          </div>
-          <div className="font-mono text-[11px] text-muted">
-            {displayPrice}{" "}
-            <span className={dayChange >= 0 ? "text-bull" : "text-bear"}>{fmtSignedPct(dayChange)}</span>{" "}
-            {bars.length > 0 && (
-              <span
-                className={cx(
-                  "rounded px-1 py-px text-[9px] font-semibold tracking-wide",
-                  freshness.live ? "bg-bull/10 text-bull" : freshness.tone === "warn" ? "bg-warn/10 text-warn" : "bg-neutral/10 text-faint",
-                )}
-              >
-                {freshness.label}
-              </span>
-            )}
+          <div className="truncate font-display text-sm font-semibold tracking-tight">{symbolCode}</div>
+          <div className="mt-0.5 flex items-center gap-2 font-mono text-[11px]">
+            <span className="text-content">{displayPrice}</span>
+            <span className={dayChange >= 0 ? "text-bull" : "text-bear"}>{fmtSignedPct(dayChange)}</span>
+            {freshnessChip}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -210,46 +200,29 @@ export function TerminalPage() {
         </div>
       </header>
 
-      {/* Desktop toolbar */}
-      <header className="hidden h-11 shrink-0 items-center justify-between gap-3 border-b border-subtle/30 bg-surface/60 px-4 backdrop-blur-md lg:flex">
+      {/* Desktop command bar */}
+      <header className="v2-toolbar hidden lg:flex">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="truncate text-[15px] font-semibold tracking-tight text-content">
-                {meta?.symbol_code ?? quote?.symbol_code ?? "Symbol"}
+              <h1 className="truncate font-display text-[15px] font-semibold tracking-tight text-content">
+                {symbolCode}
+              </h1>
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-faint">
+                {marketLabel}
               </span>
-              <span className="text-[10px] uppercase tracking-wide text-faint">{marketLabel}</span>
               <ConnectionStatusChip />
               {quote?.market_status && (
                 <Badge tone={quote.market_status === "OPEN" ? "bull" : "neutral"}>
                   {quote.market_status}
                 </Badge>
               )}
-              {bars.length > 0 && (
-                <span
-                  className={cx(
-                    "rounded px-1.5 py-px text-[9px] font-semibold tracking-wide",
-                    freshness.live
-                      ? "bg-bull/10 text-bull"
-                      : freshness.tone === "warn"
-                        ? "bg-warn/10 text-warn"
-                        : "bg-neutral/10 text-faint",
-                  )}
-                  title={resolved.asOfMs ? `Data as of ${new Date(resolved.asOfMs).toLocaleTimeString()}` : "No data"}
-                >
-                  {freshness.label}
-                </span>
-              )}
+              {freshnessChip}
               {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
-              {predictive && (
-                <span className="hidden font-mono text-[11px] text-muted xl:inline">
-                  {predictive.state} · Entry {predictive.entry}
-                </span>
-              )}
             </div>
           </div>
-          <div className="flex items-baseline gap-2 border-l border-subtle/30 pl-3">
-            <span className="font-mono text-base font-semibold tabular-nums text-content">
+          <div className="flex items-baseline gap-2.5 border-l border-subtle/30 pl-3">
+            <span className="font-mono text-[18px] font-semibold tabular-nums tracking-tight text-content">
               {displayPrice}
             </span>
             <span
@@ -261,9 +234,19 @@ export function TerminalPage() {
               {fmtSignedPct(dayChange)}
             </span>
           </div>
+          {predictive && (
+            <div className="hidden items-center gap-2 border-l border-subtle/30 pl-3 xl:flex">
+              <span className={cx("text-[11px] font-semibold", predictive.direction === "buy" ? "text-bull" : "text-bear")}>
+                {predictive.label}
+              </span>
+              <span className="font-mono text-[10px] text-muted">
+                R:R {predictive.riskReward?.toFixed(2) ?? "—"} · Ent {predictive.entry}
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5">
           <LayoutPicker />
           {activePane && !multi && (
             <>
@@ -276,25 +259,26 @@ export function TerminalPage() {
           )}
           <button
             type="button"
-            className="btn-chip"
-            onClick={() => setAiPanelOpen(!aiPanelOpen)}
-            title={aiPanelOpen ? "Hide AI panel" : "Show AI panel"}
+            className={cx("btn-chip", watchlistOpen && "btn-chip-active")}
+            onClick={() => setWatchlistOpen(!watchlistOpen)}
           >
-            AI {aiPanelOpen ? "▾" : "▸"}
+            Lists
           </button>
           <button
             type="button"
-            className="btn-chip"
-            onClick={() => setFullscreen(true)}
-            title="Fullscreen (Esc to exit)"
+            className={cx("btn-chip", aiPanelOpen && "btn-chip-active")}
+            onClick={() => setAiPanelOpen(!aiPanelOpen)}
           >
+            AI
+          </button>
+          <button type="button" className="btn-chip" onClick={() => setFullscreen(true)} title="Fullscreen (Esc)">
             Fullscreen
           </button>
           <TopBarActions />
         </div>
       </header>
 
-      {/* Mobile TF + AI */}
+      {/* Mobile TF strip */}
       <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-subtle/20 px-2 py-1.5 lg:hidden">
         {activePane && (
           <TimeframeSelector
@@ -305,64 +289,62 @@ export function TerminalPage() {
         )}
         <button
           type="button"
-          className="btn-chip shrink-0"
+          className={cx("btn-chip shrink-0", aiPanelOpen && "btn-chip-active")}
           onClick={() => setAiPanelOpen(!aiPanelOpen)}
         >
-          AI {aiPanelOpen ? "▾" : "▸"}
+          AI
         </button>
       </div>
 
-      {/* Main workspace — chart dominates (~75–80%) */}
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-[1_1_78%] basis-0">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-1 lg:p-1.5">{chartGrid}</div>
+      {/* Workspace — chart ~85% */}
+      <div className="flex min-h-0 flex-1">
+        {!isMobile && watchlistOpen && <WatchlistDrawer />}
 
-          {aiPanelOpen && activeSymbolId && (
-            <aside className="hidden w-[min(300px,26vw)] shrink-0 flex-col border-l border-subtle/30 bg-surface/40 lg:flex">
-              <AnalysisPanel id={activeSymbolId} tf={activeTf} />
-            </aside>
-          )}
-        </div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{chartGrid}</div>
 
         {aiPanelOpen && activeSymbolId && (
-          <div className="max-h-[42vh] shrink-0 overflow-auto border-t border-subtle/30 lg:hidden">
+          <aside className="v2-panel hidden w-[min(320px,28vw)] shrink-0 flex-col animate-slide-in-right lg:flex">
             <AnalysisPanel id={activeSymbolId} tf={activeTf} />
-          </div>
+          </aside>
         )}
-
-        {isMobile && panes.length > 1 && (
-          <div className="flex justify-center gap-1.5 py-1.5 lg:hidden">
-            {panes.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                aria-label={`Chart pane`}
-                className={cx(
-                  "h-1.5 w-1.5 rounded-full",
-                  p.id === activePaneId ? "bg-brand" : "bg-subtle",
-                )}
-                onClick={() => setActivePane(p.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        <div className="hidden shrink-0 border-t border-subtle/30 bg-surface/40 lg:block">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between px-4 py-1 text-[10px] uppercase tracking-wider text-faint hover:text-muted"
-            onClick={() => setBottomOpen(!bottomOpen)}
-          >
-            <span>Workbench</span>
-            <span className="font-mono">{bottomOpen ? "▾" : "▸"}</span>
-          </button>
-          {bottomOpen && activeSymbolId && (
-            <div className="h-[180px] border-t border-subtle/20">
-              <BottomPanel id={activeSymbolId} tf={activeTf} />
-            </div>
-          )}
-        </div>
       </div>
+
+      {aiPanelOpen && activeSymbolId && (
+        <div className="max-h-[44vh] shrink-0 overflow-auto border-t border-subtle/30 bg-surface/90 animate-fade-in lg:hidden">
+          <AnalysisPanel id={activeSymbolId} tf={activeTf} />
+        </div>
+      )}
+
+      {isMobile && panes.length > 1 && (
+        <PaneDots panes={panes} active={activePaneId} onSelect={setActivePane} />
+      )}
+    </div>
+  );
+}
+
+function PaneDots({
+  panes,
+  active,
+  onSelect,
+}: {
+  panes: { id: string }[];
+  active: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex justify-center gap-1.5 py-2 lg:hidden">
+      {panes.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          aria-label="Chart pane"
+          className={cx(
+            "h-1.5 rounded-full transition-all duration-200",
+            p.id === active ? "w-4 bg-brand" : "w-1.5 bg-subtle",
+          )}
+          onClick={() => onSelect(p.id)}
+        />
+      ))}
     </div>
   );
 }

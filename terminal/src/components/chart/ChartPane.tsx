@@ -1,6 +1,6 @@
 /**
- * Self-contained chart pane — independent symbol, TF, overlays, decision, trade plan.
- * Reuses TerminalChart instance across timeframe changes (same component, new candle data).
+ * Chart pane V2 — independent symbol / TF / overlays / decision.
+ * Same data hooks; new chrome only.
  */
 
 import { useMemo } from "react";
@@ -56,7 +56,6 @@ export function ChartPane({
     symbolId,
     timeframe: tf,
     market: marketCategory,
-    // Only stream the focused pane — cuts websocket/API load in multi-chart layouts.
     enabled: !!symbolId && active,
   });
 
@@ -80,8 +79,6 @@ export function ChartPane({
   const { decision, annotations, predictive } = useDecision(symbolId || null, tf);
 
   const bars = candles.data?.items ?? [];
-  // Refresh when empty OR when the newest bar lags the live market by >2 bars.
-  // (Cooldown inside useEnsureMarketData prevents refetch loops.)
   const lastBar = bars.length ? bars[bars.length - 1] : null;
   const staleMs = (timeframeSeconds(tf) * 2 + 120) * 1000;
   const isStale =
@@ -103,7 +100,6 @@ export function ChartPane({
       }));
   }, [ms.data]);
 
-  // One synchronized price for toolbar, header and chart "Last" line.
   const resolved = useMemo(
     () => resolvePrice(quoteQ.data ?? null, candles.data?.items ?? []),
     [quoteQ.data, candles.data],
@@ -133,6 +129,7 @@ export function ChartPane({
       sma.data,
       vwap.data,
       quoteQ.data,
+      resolved.price,
       ob.data,
       fvg.data,
       sweeps.data,
@@ -142,7 +139,6 @@ export function ChartPane({
       annotations,
       predictive,
       swings,
-      resolved,
     ],
   );
 
@@ -164,14 +160,14 @@ export function ChartPane({
       role="presentation"
       onMouseDown={() => setActivePane(pane.id)}
       className={cx(
-        "flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface/40",
-        active ? "ring-1 ring-brand/40" : "ring-1 ring-transparent",
+        "flex h-full min-h-0 min-w-0 flex-col overflow-hidden transition-shadow duration-200",
+        active ? "ring-1 ring-inset ring-brand/35" : "ring-1 ring-inset ring-transparent",
       )}
     >
       {showToolbar && (
         <div
           className={cx(
-            "flex shrink-0 items-center gap-2 border-b border-subtle/40 px-2",
+            "flex shrink-0 items-center gap-2 border-b border-subtle/25 bg-surface/40 px-2 backdrop-blur-sm",
             compact ? "h-9" : "h-10",
           )}
         >
@@ -185,7 +181,7 @@ export function ChartPane({
               {!compact && (
                 <span
                   className={cx(
-                    "font-mono text-[11px]",
+                    "font-mono text-[11px] tabular-nums",
                     dayChange >= 0 ? "text-bull" : "text-bear",
                   )}
                 >
@@ -197,23 +193,16 @@ export function ChartPane({
                   className={cx(
                     "rounded px-1 py-px text-[9px] font-semibold tracking-wide",
                     freshness.live
-                      ? "bg-bull/10 text-bull"
+                      ? "text-bull"
                       : freshness.tone === "warn"
-                        ? "bg-warn/10 text-warn"
-                        : "bg-neutral/10 text-faint",
+                        ? "text-warn"
+                        : "text-faint",
                   )}
-                  title={
-                    freshness.ageSeconds != null
-                      ? `Data as of ${resolved.asOfMs ? new Date(resolved.asOfMs).toLocaleTimeString() : "—"}`
-                      : "No data"
-                  }
                 >
                   {freshness.label}
                 </span>
               )}
-              {decision && (
-                <Badge tone={decision.tone}>{decision.kind}</Badge>
-              )}
+              {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
             </div>
           </div>
           <TimeframeSelector
@@ -221,14 +210,14 @@ export function ChartPane({
             onChange={(t) => setPaneTimeframe(pane.id, t as Timeframe)}
             compact
           />
-          <PaneOverlayMenu overlays={overlays} onChange={onOverlay} />
+          <OverlayToggles overlays={overlays} onChange={onOverlay} />
         </div>
       )}
 
       <div className="relative min-h-0 flex-1 chart-stage">
         {!symbolId ? (
           <div className="flex h-full items-center justify-center text-sm text-muted">
-            Select a symbol from Markets
+            Select a symbol from Lists or Markets
           </div>
         ) : candles.isLoading || (ensure.isBusy && bars.length === 0) ? (
           <Spinner
@@ -236,7 +225,7 @@ export function ChartPane({
               ensure.status === "downloading"
                 ? "Downloading candles…"
                 : ensure.status === "analyzing"
-                  ? "Analyzing market structure…"
+                  ? "Analyzing structure…"
                   : "Loading chart…"
             }
           />
@@ -254,21 +243,5 @@ export function ChartPane({
         )}
       </div>
     </div>
-  );
-}
-
-function PaneOverlayMenu({
-  overlays,
-  onChange,
-}: {
-  overlays: Record<OverlayId, boolean>;
-  onChange: (id: OverlayId, on: boolean) => void;
-}) {
-  // Local bridge so OverlayToggles can drive per-pane overlays without global settings.
-  return (
-    <OverlayToggles
-      overlays={overlays}
-      onChange={onChange}
-    />
   );
 }

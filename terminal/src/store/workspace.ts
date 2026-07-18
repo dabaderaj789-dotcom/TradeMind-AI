@@ -22,6 +22,7 @@ interface WorkspaceState {
   panes: ChartPaneState[];
   activePaneId: string;
   aiPanelOpen: boolean;
+  watchlistOpen: boolean;
   bottomOpen: boolean;
   fullscreen: boolean;
   setLayout: (layout: LayoutId) => void;
@@ -31,6 +32,7 @@ interface WorkspaceState {
   setPaneOverlay: (paneId: string, overlayId: OverlayId, on: boolean) => void;
   syncPrimarySymbol: (symbolId: string) => void;
   setAiPanelOpen: (open: boolean) => void;
+  setWatchlistOpen: (open: boolean) => void;
   setBottomOpen: (open: boolean) => void;
   setFullscreen: (on: boolean) => void;
   toggleFullscreen: () => void;
@@ -79,6 +81,7 @@ export const useWorkspace = create<WorkspaceState>()(
       panes: [makePane("pane-1")],
       activePaneId: "pane-1",
       aiPanelOpen: true,
+      watchlistOpen: false,
       bottomOpen: false,
       fullscreen: false,
       setLayout: (layout) =>
@@ -120,18 +123,20 @@ export const useWorkspace = create<WorkspaceState>()(
         });
       },
       setAiPanelOpen: (open) => set({ aiPanelOpen: open }),
+      setWatchlistOpen: (open) => set({ watchlistOpen: open }),
       setBottomOpen: (open) => set({ bottomOpen: open }),
       setFullscreen: (on) => set({ fullscreen: on }),
       toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen })),
     }),
     {
       name: "trademind.workspace",
-      version: 1,
+      version: 2,
       partialize: (s) => ({
         layout: s.layout,
         panes: s.panes,
         activePaneId: s.activePaneId,
         aiPanelOpen: s.aiPanelOpen,
+        watchlistOpen: s.watchlistOpen,
       }),
     },
   ),

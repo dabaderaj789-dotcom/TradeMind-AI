@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import {
   useAnalysis,
+  useCandles,
   useFvgs,
   useLevels,
   useMarketQuote,
@@ -17,8 +18,8 @@ import { AnalystBriefCard } from "./AnalystBriefCard";
 import { PredictiveSignalCard } from "./PredictiveSignalCard";
 import { OhlcComparePanel, QuoteVerifyPanel } from "../chart/OhlcComparePanel";
 import { useSettings } from "../../store/settings";
-import { useCandles } from "../../hooks/queries";
 
+/** Terminal V2 AI rail — institutional brief first. */
 export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
   const { decision, predictive, isLoading, trend } = useDecision(id, tf);
   const tvCompareMode = useSettings((s) => s.tvCompareMode);
@@ -66,11 +67,13 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
   );
 
   return (
-    <div className="h-full overflow-auto p-3 space-y-3 ai-panel-scroll">
-      <div className="px-1 pt-1">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-faint">AI Assistant</div>
-        <div className="mt-0.5 flex items-center gap-2">
-          <span className="text-sm text-muted">Institutional analyst view</span>
+    <div className="h-full space-y-3 overflow-auto p-3.5 ai-panel-scroll animate-fade-in">
+      <div className="px-0.5 pb-1">
+        <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-faint">Analyst</div>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="font-display text-sm font-semibold tracking-tight text-content">
+            Market brief
+          </span>
           {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
         </div>
       </div>
@@ -80,11 +83,14 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
       {predictive && <PredictiveSignalCard plan={predictive} loading={isLoading} />}
 
       {decision && decision.qualityChecks.length > 0 && (
-        <Card title="Quality Gates" subtitle={`${decision.qualityChecks.filter((c) => c.passed).length}/${decision.qualityChecks.length} cleared`}>
+        <Card
+          title="Quality gates"
+          subtitle={`${decision.qualityChecks.filter((c) => c.passed).length}/${decision.qualityChecks.length} cleared`}
+        >
           <ul className="space-y-1.5">
             {decision.qualityChecks.slice(0, 8).map((c) => (
               <li key={c.id} className="flex items-start gap-2 text-[11px]">
-                <span className={c.passed ? "text-bull shrink-0" : "text-warn shrink-0"}>
+                <span className={c.passed ? "shrink-0 text-bull" : "shrink-0 text-warn"}>
                   {c.passed ? "●" : "○"}
                 </span>
                 <span className="min-w-0">
@@ -95,7 +101,7 @@ export function AnalysisPanel({ id, tf }: { id: string; tf: string }) {
             ))}
           </ul>
           {decision.mtf.summary && (
-            <p className="mt-3 text-[11px] text-muted leading-relaxed">
+            <p className="mt-3 text-[11px] leading-relaxed text-muted">
               Multi-timeframe: {decision.mtf.summary}
               {trend ? ` · Phase ${titleCase(trend.market_phase)}` : ""}
             </p>

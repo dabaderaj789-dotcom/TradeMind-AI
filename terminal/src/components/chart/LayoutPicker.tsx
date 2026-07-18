@@ -5,13 +5,10 @@ export function LayoutPicker({ mobile = false }: { mobile?: boolean }) {
   const layout = useWorkspace((s) => s.layout);
   const setLayout = useWorkspace((s) => s.setLayout);
 
-  if (mobile) {
-    // Mobile: single chart only
-    return null;
-  }
+  if (mobile) return null;
 
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-md border border-subtle/40 bg-elevated/80 p-0.5">
+    <div className="inline-flex items-center gap-0.5">
       {LAYOUT_OPTIONS.map((opt) => (
         <button
           key={opt.id}
@@ -19,8 +16,10 @@ export function LayoutPicker({ mobile = false }: { mobile?: boolean }) {
           title={opt.label}
           onClick={() => setLayout(opt.id as LayoutId)}
           className={cx(
-            "px-2 py-1 text-[10px] font-semibold rounded transition-colors",
-            layout === opt.id ? "bg-brand text-white" : "text-muted hover:text-content",
+            "rounded-md px-2 py-1.5 text-[10px] font-semibold tracking-wide transition-all duration-200 ease-terminal",
+            layout === opt.id
+              ? "bg-elevated text-content shadow-[inset_0_-1px_0_0_rgb(var(--c-brand))]"
+              : "text-faint hover:bg-elevated/50 hover:text-muted",
           )}
         >
           {opt.short}

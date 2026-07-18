@@ -11,21 +11,18 @@ export function TimeframeSelector({
   compact?: boolean;
 }) {
   return (
-    <div
-      className={cx(
-        "inline-flex max-w-full overflow-x-auto rounded-md border border-subtle/40 bg-elevated/80 p-0.5",
-        compact && "scrollbar-none",
-      )}
-    >
+    <div className={cx("inline-flex max-w-full overflow-x-auto", compact && "scrollbar-none")}>
       {TIMEFRAMES.map((tf) => (
         <button
           key={tf}
           type="button"
           onClick={() => onChange(tf)}
           className={cx(
-            "shrink-0 font-medium transition-colors",
-            compact ? "px-1.5 py-0.5 text-[10px] rounded" : "px-2 py-1 text-xs rounded-md",
-            value === tf ? "bg-brand text-white" : "text-muted hover:text-content",
+            "shrink-0 font-medium tracking-wide transition-all duration-200 ease-terminal",
+            compact ? "rounded px-1.5 py-1 text-[10px]" : "rounded-md px-2.5 py-1.5 text-[11px]",
+            value === tf
+              ? "bg-elevated text-content shadow-[inset_0_-1px_0_0_rgb(var(--c-brand))]"
+              : "text-faint hover:bg-elevated/50 hover:text-muted",
           )}
         >
           {TIMEFRAME_LABELS[tf]}

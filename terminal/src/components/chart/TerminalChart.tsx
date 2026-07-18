@@ -110,29 +110,29 @@ export function TerminalChart({ candles, enabled, data }: Props) {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "rgba(148,163,184,0.95)",
-        fontFamily: '"IBM Plex Sans", Inter, system-ui, sans-serif',
-        fontSize: 12,
+        fontFamily: '"Sora", "IBM Plex Sans", system-ui, sans-serif',
+        fontSize: 11,
       },
       grid: {
-        vertLines: { color: "rgba(148,163,184,0.045)" },
-        horzLines: { color: "rgba(148,163,184,0.045)" },
+        vertLines: { color: "rgba(148,156,172,0.035)" },
+        horzLines: { color: "rgba(148,156,172,0.035)" },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(79,124,255,0.35)", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#1a2134" },
-        horzLine: { color: "rgba(79,124,255,0.35)", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#1a2134" },
+        vertLine: { color: "rgba(94,168,210,0.35)", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#14161c" },
+        horzLine: { color: "rgba(94,168,210,0.35)", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#14161c" },
       },
-      rightPriceScale: { borderColor: "rgba(148,163,184,0.1)", scaleMargins: { top: 0.08, bottom: 0.16 } },
-      timeScale: { borderColor: "rgba(148,163,184,0.1)", timeVisible: true, secondsVisible: false },
+      rightPriceScale: { borderColor: "rgba(38,43,54,0.9)", scaleMargins: { top: 0.06, bottom: 0.14 } },
+      timeScale: { borderColor: "rgba(38,43,54,0.9)", timeVisible: true, secondsVisible: false },
       autoSize: true,
     });
     const candleSeries = chart.addCandlestickSeries({
-      upColor: "#22c55e",
-      downColor: "#ef4444",
-      borderUpColor: "#22c55e",
-      borderDownColor: "#ef4444",
-      wickUpColor: "#4ade80",
-      wickDownColor: "#f87171",
+      upColor: "#34ba7a",
+      downColor: "#e85c5c",
+      borderUpColor: "#34ba7a",
+      borderDownColor: "#e85c5c",
+      wickUpColor: "#5fd49a",
+      wickDownColor: "#f08080",
     });
     const volumeSeries = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol" });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.88, bottom: 0 } });
@@ -458,41 +458,42 @@ export function TerminalChart({ candles, enabled, data }: Props) {
 function PlanHud({ plan }: { plan: PredictivePlan }) {
   const buy = plan.direction === "buy";
   return (
-    <div className="pointer-events-none absolute left-3 top-3 max-w-[280px]">
+    <div className="pointer-events-none absolute left-3 top-3 max-w-[260px] animate-fade-in">
       <div
-        className={`rounded-xl border backdrop-blur-md px-3 py-2.5 shadow-pop ${
-          buy ? "border-bull/30 bg-surface/90" : "border-bear/30 bg-surface/90"
+        className={`rounded-xl border px-3.5 py-3 shadow-pop backdrop-blur-xl ${
+          buy ? "border-bull/25 bg-surface/92" : "border-bear/25 bg-surface/92"
         }`}
       >
-        <div className={`text-[11px] font-bold tracking-wide ${buy ? "text-bull" : "text-bear"}`}>
-          {plan.label} · {Math.round(plan.confidence)}%
+        <div className={`font-display text-[11px] font-semibold tracking-wide ${buy ? "text-bull" : "text-bear"}`}>
+          {plan.label}
+          <span className="ml-2 font-mono text-muted">{Math.round(plan.confidence)}%</span>
         </div>
-        <div className="mt-1 text-[10px] text-muted">
+        <div className="mt-1 text-[10px] text-faint">
           {plan.state} · {plan.setupType}
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] font-mono">
+        <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-[10px]">
           <span className="text-faint">Entry</span>
-          <span className="text-brand text-right">{plan.entry}</span>
+          <span className="text-right text-brand">{plan.entry}</span>
           <span className="text-faint">Stop</span>
-          <span className="text-bear text-right">{plan.stop}</span>
+          <span className="text-right text-bear">{plan.stop}</span>
           <span className="text-faint">TP1</span>
-          <span className="text-info text-right">{plan.target1}</span>
+          <span className="text-right text-info">{plan.target1}</span>
           {plan.target2 != null && (
             <>
               <span className="text-faint">TP2</span>
-              <span className="text-info text-right">{plan.target2}</span>
+              <span className="text-right text-info">{plan.target2}</span>
             </>
           )}
           {plan.target3 != null && (
             <>
               <span className="text-faint">TP3</span>
-              <span className="text-info text-right">{plan.target3}</span>
+              <span className="text-right text-info">{plan.target3}</span>
             </>
           )}
           {plan.riskReward != null && (
             <>
               <span className="text-faint">R:R</span>
-              <span className="text-brand text-right">1:{plan.riskReward.toFixed(2)}</span>
+              <span className="text-right text-content">1:{plan.riskReward.toFixed(2)}</span>
             </>
           )}
         </div>

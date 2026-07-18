@@ -26,35 +26,54 @@ export default {
         info: withAlpha("--c-info"),
         neutral: withAlpha("--c-neutral"),
       },
-          fontFamily: {
-            sans: ["IBM Plex Sans", "Segoe UI", "system-ui", "sans-serif"],
-            mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
-            display: ["IBM Plex Sans", "Segoe UI", "system-ui", "sans-serif"],
-          },
+      fontFamily: {
+        sans: ["Sora", "Segoe UI", "system-ui", "sans-serif"],
+        display: ["Sora", "Segoe UI", "system-ui", "sans-serif"],
+        mono: ["IBM Plex Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+      },
       borderRadius: {
-        xl: "0.85rem",
-        "2xl": "1.1rem",
+        xl: "0.75rem",
+        "2xl": "1rem",
       },
       boxShadow: {
-        card: "0 1px 2px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.18)",
-        pop: "0 12px 40px rgba(0,0,0,0.45)",
+        card: "0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 28px rgba(0,0,0,0.35)",
+        pop: "0 16px 48px rgba(0,0,0,0.55)",
+        glow: "0 0 0 1px rgba(94, 168, 210, 0.18), 0 0 24px rgba(94, 168, 210, 0.08)",
       },
       keyframes: {
         "fade-in": {
-          "0%": { opacity: "0", transform: "translateY(4px)" },
+          "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "slide-in-right": {
+          "0%": { opacity: "0", transform: "translateX(12px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        "slide-in-left": {
+          "0%": { opacity: "0", transform: "translateX(-12px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
         "scale-in": {
-          "0%": { opacity: "0", transform: "scale(0.97)" },
+          "0%": { opacity: "0", transform: "scale(0.98)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
+        pulseSoft: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.55" },
+        },
       },
       animation: {
-        "fade-in": "fade-in 0.2s ease-out",
-        "scale-in": "scale-in 0.15s ease-out",
+        "fade-in": "fade-in 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+        "slide-in-right": "slide-in-right 0.32s cubic-bezier(0.22, 1, 0.36, 1)",
+        "slide-in-left": "slide-in-left 0.32s cubic-bezier(0.22, 1, 0.36, 1)",
+        "scale-in": "scale-in 0.2s ease-out",
+        "pulse-soft": "pulseSoft 2.4s ease-in-out infinite",
+      },
+      transitionTimingFunction: {
+        terminal: "cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },

@@ -32,7 +32,7 @@ export function MobileNav() {
 
   return (
     <nav
-      className="terminal-mobile-nav fixed inset-x-0 bottom-0 z-40 border-t border-subtle/50 bg-surface/95 backdrop-blur-md lg:hidden"
+      className="terminal-mobile-nav fixed inset-x-0 bottom-0 z-40 border-t border-subtle/40 bg-surface/95 backdrop-blur-xl lg:hidden"
       style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom))" }}
       aria-label="Primary"
     >

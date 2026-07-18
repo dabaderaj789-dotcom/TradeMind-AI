@@ -2,43 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---- Theme tokens (RGB triplets so Tailwind alpha works) ---------------- */
+/* TradeMind Terminal V2 — institutional graphite desk */
 :root,
 [data-theme="dark"] {
-  --c-bg: 7 10 18;
-  --c-surface: 13 17 27;
-  --c-elevated: 20 27 43;
-  --c-overlay: 26 33 52;
-  --c-border: 33 42 66;
-  --c-text: 226 232 240;
-  --c-text-muted: 148 163 184;
-  --c-text-faint: 100 116 139;
-  --c-brand: 79 124 255;
-  --c-brand-soft: 30 47 94;
-  --c-bull: 34 197 94;
-  --c-bear: 239 68 68;
-  --c-warn: 245 158 11;
-  --c-info: 56 152 255;
-  --c-neutral: 148 163 184;
+  --c-bg: 8 9 11;
+  --c-surface: 14 16 20;
+  --c-elevated: 20 23 29;
+  --c-overlay: 26 30 38;
+  --c-border: 38 43 54;
+  --c-text: 232 234 239;
+  --c-text-muted: 148 156 172;
+  --c-text-faint: 98 106 122;
+  --c-brand: 94 168 210;
+  --c-brand-soft: 28 48 62;
+  --c-bull: 52 186 122;
+  --c-bear: 232 92 92;
+  --c-warn: 214 160 72;
+  --c-info: 94 168 210;
+  --c-neutral: 120 128 142;
   color-scheme: dark;
 }
 
 [data-theme="light"] {
-  --c-bg: 241 244 250;
+  --c-bg: 244 245 247;
   --c-surface: 255 255 255;
-  --c-elevated: 248 250 252;
+  --c-elevated: 248 249 251;
   --c-overlay: 255 255 255;
-  --c-border: 224 230 240;
-  --c-text: 15 23 42;
-  --c-text-muted: 71 85 105;
-  --c-text-faint: 148 163 184;
-  --c-brand: 45 96 240;
-  --c-brand-soft: 219 231 255;
-  --c-bull: 22 163 74;
-  --c-bear: 220 38 38;
-  --c-warn: 217 119 6;
-  --c-info: 37 99 235;
-  --c-neutral: 100 116 139;
+  --c-border: 220 224 232;
+  --c-text: 18 22 30;
+  --c-text-muted: 78 88 104;
+  --c-text-faint: 140 148 162;
+  --c-brand: 46 118 168;
+  --c-brand-soft: 220 236 246;
+  --c-bull: 22 148 88;
+  --c-bear: 200 56 56;
+  --c-warn: 180 120 40;
+  --c-info: 46 118 168;
+  --c-neutral: 110 118 132;
   color-scheme: light;
 }
 
@@ -52,72 +52,91 @@
     @apply bg-bg text-content font-sans antialiased;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    letter-spacing: -0.01em;
   }
   @media (max-width: 1023px) {
     body {
-      font-size: 16px; /* avoids iOS input zoom */
+      font-size: 16px;
     }
   }
   ::-webkit-scrollbar {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-line rounded-full;
+    @apply rounded-full bg-line/80;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
+  }
+  ::selection {
+    background: rgb(var(--c-brand) / 0.28);
   }
 }
 
 @layer components {
   .card {
-    @apply bg-surface border border-subtle/70 rounded-xl shadow-card;
+    @apply rounded-xl border border-subtle/50 bg-surface/90 shadow-card;
   }
   .card-header {
-    @apply flex items-center justify-between gap-2 px-4 py-3 border-b border-subtle/60;
+    @apply flex items-center justify-between gap-2 border-b border-subtle/40 px-4 py-3;
   }
   .card-title {
-    @apply text-[13px] font-semibold text-content tracking-wide;
+    @apply font-display text-[12px] font-semibold tracking-[0.04em] text-content;
   }
   .pill {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold;
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wide;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ease-terminal disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-brand hover:brightness-110 text-white shadow-card;
+    @apply btn bg-brand text-bg hover:brightness-110;
   }
   .btn-ghost {
-    @apply btn bg-elevated hover:bg-overlay text-content border border-subtle/70;
+    @apply btn border border-subtle/60 bg-elevated/60 text-content hover:bg-overlay;
   }
   .btn-chip {
-    @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium border border-subtle/70 text-muted hover:text-content hover:bg-elevated transition-colors;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-transparent px-2.5 py-1.5 text-[11px] font-medium text-muted transition-all duration-200 ease-terminal hover:border-subtle/50 hover:bg-elevated/80 hover:text-content;
+  }
+  .btn-chip-active {
+    @apply border-brand/30 bg-brand/10 text-brand;
   }
   .input {
-    @apply w-full bg-elevated border border-subtle/70 rounded-lg px-3 py-2 text-sm text-content placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/50 transition;
+    @apply w-full rounded-lg border border-subtle/50 bg-elevated/80 px-3 py-2 text-sm text-content placeholder:text-faint transition focus:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/20;
   }
   .skeleton {
-    @apply relative overflow-hidden bg-elevated rounded-md;
+    @apply relative overflow-hidden rounded-md bg-elevated;
   }
   .skeleton::after {
     content: "";
     @apply absolute inset-0;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgb(var(--c-text) / 0.06),
-      transparent
-    );
+    background: linear-gradient(90deg, transparent, rgb(var(--c-text) / 0.05), transparent);
     transform: translateX(-100%);
     animation: shimmer 1.4s infinite;
   }
   .chart-stage {
-    background: rgb(var(--c-surface));
+    background:
+      radial-gradient(1200px 500px at 50% -10%, rgb(var(--c-brand) / 0.04), transparent 55%),
+      rgb(var(--c-bg));
   }
   .ai-panel-scroll {
     scrollbar-gutter: stable;
+  }
+  .v2-toolbar {
+    @apply flex h-12 shrink-0 items-center gap-3 border-b border-subtle/30 bg-surface/70 px-3 backdrop-blur-xl lg:px-4;
+  }
+  .v2-rail-btn {
+    @apply flex h-10 w-10 items-center justify-center rounded-lg text-faint transition-all duration-200 ease-terminal hover:bg-elevated hover:text-content;
+  }
+  .v2-rail-btn-active {
+    @apply bg-brand/10 text-brand shadow-glow;
+  }
+  .v2-panel {
+    @apply border-l border-subtle/30 bg-surface/80 backdrop-blur-xl;
+  }
+  .v2-drawer {
+    @apply border-r border-subtle/30 bg-surface/95 backdrop-blur-xl;
   }
 }
 
@@ -130,7 +149,7 @@
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -139,10 +158,9 @@
 }
 
 .animate-fade-in {
-  animation: fade-in 0.18s ease-out;
+  animation: fade-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Touch-friendly spacing helpers for iPhone-class viewports */
 @media (max-width: 430px) {
   .btn-chip {
     @apply min-h-[36px];
@@ -152,8 +170,8 @@
   }
 }
 
-/* Fullscreen terminal — hide Markets sidebar + bottom nav chrome */
-html[data-terminal-fullscreen="1"] .terminal-shell > aside,
+/* Fullscreen — hide chrome */
+html[data-terminal-fullscreen="1"] .terminal-shell > aside.terminal-rail,
 html[data-terminal-fullscreen="1"] .terminal-mobile-nav {
   display: none !important;
 }
