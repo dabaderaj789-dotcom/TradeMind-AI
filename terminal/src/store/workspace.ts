@@ -1,6 +1,6 @@
 /**
- * Multi-chart workspace state — independent symbol/TF/overlays per pane.
- * No trading logic; visualization layout only.
+ * TradeMind V4 workspace — panels, widths, drawing tool, analysis fullscreen.
+ * Presentation only; no trading-logic changes.
  */
 
 import { create } from "zustand";
@@ -9,6 +9,18 @@ import type { Timeframe } from "../lib/endpoints";
 import { DEFAULT_OVERLAYS, normalizeOverlays, type OverlayId } from "../lib/overlays";
 
 export type LayoutId = "1" | "2v" | "2h" | "4" | "6" | "8";
+
+export type DrawingToolId =
+  | "cursor"
+  | "crosshair"
+  | "hline"
+  | "trendline"
+  | "ray"
+  | "rect"
+  | "fib"
+  | "text"
+  | "measure"
+  | "eraser";
 
 export interface ChartPaneState {
   id: string;
@@ -25,6 +37,10 @@ interface WorkspaceState {
   watchlistOpen: boolean;
   bottomOpen: boolean;
   fullscreen: boolean;
+  analysisFullscreen: boolean;
+  watchlistWidth: number;
+  aiPanelWidth: number;
+  drawingTool: DrawingToolId;
   setLayout: (layout: LayoutId) => void;
   setActivePane: (id: string) => void;
   setPaneSymbol: (paneId: string, symbolId: string) => void;
@@ -32,10 +48,16 @@ interface WorkspaceState {
   setPaneOverlay: (paneId: string, overlayId: OverlayId, on: boolean) => void;
   syncPrimarySymbol: (symbolId: string) => void;
   setAiPanelOpen: (open: boolean) => void;
+  toggleAiPanel: () => void;
   setWatchlistOpen: (open: boolean) => void;
+  toggleWatchlist: () => void;
   setBottomOpen: (open: boolean) => void;
   setFullscreen: (on: boolean) => void;
   toggleFullscreen: () => void;
+  setAnalysisFullscreen: (on: boolean) => void;
+  setWatchlistWidth: (w: number) => void;
+  setAiPanelWidth: (w: number) => void;
+  setDrawingTool: (tool: DrawingToolId) => void;
 }
 
 const LAYOUT_COUNTS: Record<LayoutId, number> = {
@@ -69,9 +91,13 @@ function resizePanes(panes: ChartPaneState[], count: number, fillSymbol: string)
   const next = panes.slice(0, count).map((p) => ({ ...p, overlays: { ...p.overlays } }));
   while (next.length < count) {
     const seed = next[0]?.symbolId || fillSymbol;
-    next.push(makePane(`pane-${next.length + 1}-${Date.now()}`, seed, next[0]?.timeframe ?? "1h"));
+    next.push(makePane(`pane-${next.length + 1}-${Date.now()}`, seed, next[0]?.timeframe ?? "15m"));
   }
   return next;
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
 }
 
 export const useWorkspace = create<WorkspaceState>()(
@@ -84,6 +110,10 @@ export const useWorkspace = create<WorkspaceState>()(
       watchlistOpen: true,
       bottomOpen: false,
       fullscreen: false,
+      analysisFullscreen: false,
+      watchlistWidth: 248,
+      aiPanelWidth: 340,
+      drawingTool: "cursor",
       setLayout: (layout) =>
         set((s) => {
           const panes = resizePanes(s.panes, LAYOUT_COUNTS[layout], s.panes[0]?.symbolId ?? "");
@@ -117,28 +147,44 @@ export const useWorkspace = create<WorkspaceState>()(
           });
           return;
         }
-        // Keep active pane on the navigated symbol when multi-chart.
         set({
           panes: s.panes.map((p) => (p.id === s.activePaneId ? { ...p, symbolId } : p)),
         });
       },
-      setAiPanelOpen: (open) => set({ aiPanelOpen: open }),
+      setAiPanelOpen: (open) => set({ aiPanelOpen: open, analysisFullscreen: open ? get().analysisFullscreen : false }),
+      toggleAiPanel: () =>
+        set((s) => ({
+          aiPanelOpen: !s.aiPanelOpen,
+          analysisFullscreen: !s.aiPanelOpen ? s.analysisFullscreen : false,
+        })),
       setWatchlistOpen: (open) => set({ watchlistOpen: open }),
+      toggleWatchlist: () => set((s) => ({ watchlistOpen: !s.watchlistOpen })),
       setBottomOpen: (open) => set({ bottomOpen: open }),
-      setFullscreen: (on) => set({ fullscreen: on }),
-      toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen })),
+      setFullscreen: (on) => set({ fullscreen: on, analysisFullscreen: on ? false : get().analysisFullscreen }),
+      toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen, analysisFullscreen: false })),
+      setAnalysisFullscreen: (on) =>
+        set({
+          analysisFullscreen: on,
+          aiPanelOpen: on ? true : get().aiPanelOpen,
+          fullscreen: on ? false : get().fullscreen,
+        }),
+      setWatchlistWidth: (w) => set({ watchlistWidth: clamp(w, 180, 420) }),
+      setAiPanelWidth: (w) => set({ aiPanelWidth: clamp(w, 280, 560) }),
+      setDrawingTool: (tool) => set({ drawingTool: tool }),
     }),
     {
       name: "trademind.workspace",
-      version: 4,
+      version: 5,
       partialize: (s) => ({
         layout: s.layout,
         panes: s.panes,
         activePaneId: s.activePaneId,
         aiPanelOpen: s.aiPanelOpen,
         watchlistOpen: s.watchlistOpen,
+        watchlistWidth: s.watchlistWidth,
+        aiPanelWidth: s.aiPanelWidth,
       }),
-      migrate: (persisted, _fromVersion) => {
+      migrate: (persisted) => {
         const p = (persisted ?? {}) as Partial<WorkspaceState>;
         const panes = (p.panes ?? [makePane("pane-1")]).map((pane) => ({
           ...pane,
@@ -151,7 +197,13 @@ export const useWorkspace = create<WorkspaceState>()(
           layout: "1",
           activePaneId: p.activePaneId ?? panes[0]?.id ?? "pane-1",
           aiPanelOpen: p.aiPanelOpen ?? true,
-          watchlistOpen: true,
+          watchlistOpen: p.watchlistOpen ?? true,
+          watchlistWidth: p.watchlistWidth ?? 248,
+          aiPanelWidth: p.aiPanelWidth ?? 340,
+          drawingTool: "cursor",
+          analysisFullscreen: false,
+          fullscreen: false,
+          bottomOpen: false,
         } as WorkspaceState;
       },
     },

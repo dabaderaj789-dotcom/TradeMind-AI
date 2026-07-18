@@ -36,7 +36,7 @@ export function IconRail() {
         <RailLink to="/settings" label="Settings" icon={<IconGear />} />
       </nav>
 
-      <div className="mt-2 text-[8px] font-semibold tracking-[0.2em] text-faint">V3</div>
+      <div className="mt-2 text-[8px] font-semibold tracking-[0.2em] text-faint">V4</div>
     </aside>
   );
 }

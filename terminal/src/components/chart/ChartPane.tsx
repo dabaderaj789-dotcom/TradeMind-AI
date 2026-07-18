@@ -250,7 +250,7 @@ export function ChartPane({
             Preparing chart…
           </div>
         ) : (
-          <TerminalChart candles={bars} enabled={overlays} data={overlayData} />
+          <TerminalChart candles={bars} enabled={overlays} data={overlayData} symbolId={symbolId} />
         )}
       </div>
     </div>

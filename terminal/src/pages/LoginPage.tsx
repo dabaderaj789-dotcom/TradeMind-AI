@@ -29,7 +29,7 @@ export function LoginPage() {
             </svg>
           </div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-content">TradeMind AI</h1>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand">Terminal V3</p>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-brand">Terminal V4</div>
         </div>
 
         <form

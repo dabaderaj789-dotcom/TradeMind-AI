@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* TradeMind Terminal V2 — institutional graphite desk */
+/* TradeMind Terminal V4 — premium graphite desk */
 :root,
 [data-theme="dark"] {
   --c-bg: 8 9 11;

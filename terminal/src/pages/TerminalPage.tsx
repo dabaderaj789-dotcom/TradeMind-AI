@@ -1,15 +1,18 @@
 /**
- * TradeMind AI Terminal V3 — professional chart-first workspace.
- * Desktop: watchlist | chart | AI desk (Angel One–style hierarchy, original design).
- * Mobile: full-bleed chart + TF strip + optional AI sheet.
+ * TradeMind AI Terminal V4 — premium professional trading desk.
+ * Drawing toolbar · collapsible/resizable panels · floating AI · analysis fullscreen.
+ * No trading-logic / backend changes.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AnalysisPanel } from "../components/analysis/AnalysisPanel";
 import { ChartPane } from "../components/chart/ChartPane";
+import { DrawingToolbar } from "../components/chart/DrawingToolbar";
 import { OverlayToggles } from "../components/chart/OverlayToggles";
 import { TimeframeSelector } from "../components/chart/TimeframeSelector";
+import { FloatingAiButton } from "../components/layout/FloatingAiButton";
+import { PanelResizeHandle } from "../components/layout/PanelResizeHandle";
 import { WatchlistDrawer } from "../components/layout/WatchlistDrawer";
 import { ConnectionStatusChip } from "../components/shell/ConnectionStatus";
 import { TopBarActions } from "../components/layout/TopBarActions";
@@ -31,13 +34,21 @@ export function TerminalPage() {
   const panes = useWorkspace((s) => s.panes);
   const activePaneId = useWorkspace((s) => s.activePaneId);
   const aiPanelOpen = useWorkspace((s) => s.aiPanelOpen);
+  const watchlistOpen = useWorkspace((s) => s.watchlistOpen);
   const fullscreen = useWorkspace((s) => s.fullscreen);
+  const analysisFullscreen = useWorkspace((s) => s.analysisFullscreen);
+  const watchlistWidth = useWorkspace((s) => s.watchlistWidth);
+  const aiPanelWidth = useWorkspace((s) => s.aiPanelWidth);
   const syncPrimarySymbol = useWorkspace((s) => s.syncPrimarySymbol);
   const setAiPanelOpen = useWorkspace((s) => s.setAiPanelOpen);
+  const toggleWatchlist = useWorkspace((s) => s.toggleWatchlist);
   const setFullscreen = useWorkspace((s) => s.setFullscreen);
+  const setAnalysisFullscreen = useWorkspace((s) => s.setAnalysisFullscreen);
   const setPaneTimeframe = useWorkspace((s) => s.setPaneTimeframe);
   const setPaneOverlay = useWorkspace((s) => s.setPaneOverlay);
   const setLayout = useWorkspace((s) => s.setLayout);
+  const setWatchlistWidth = useWorkspace((s) => s.setWatchlistWidth);
+  const setAiPanelWidth = useWorkspace((s) => s.setAiPanelWidth);
 
   const activePane = useMemo(
     () => panes.find((p) => p.id === activePaneId) ?? panes[0],
@@ -55,13 +66,23 @@ export function TerminalPage() {
   }, [setLayout]);
 
   useEffect(() => {
-    if (!fullscreen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFullscreen(false);
+      if (e.key === "Escape") {
+        if (analysisFullscreen) setAnalysisFullscreen(false);
+        else if (fullscreen) setFullscreen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen, setFullscreen]);
+  }, [fullscreen, analysisFullscreen, setFullscreen, setAnalysisFullscreen]);
+
+  useEffect(() => {
+    document.documentElement.dataset.terminalFullscreen =
+      fullscreen || analysisFullscreen ? "1" : "0";
+    return () => {
+      delete document.documentElement.dataset.terminalFullscreen;
+    };
+  }, [fullscreen, analysisFullscreen]);
 
   const activeSymbolId = activePane?.symbolId || symbolId;
   const activeTf = (activePane?.timeframe ?? "15m") as Timeframe;
@@ -116,6 +137,26 @@ export function TerminalPage() {
     </span>
   );
 
+  // —— Analysis fullscreen (Bloomberg desk) ——
+  if (analysisFullscreen && activeSymbolId) {
+    return (
+      <div className="fixed inset-0 z-[70] flex flex-col bg-bg animate-fade-in">
+        <div className="flex h-11 shrink-0 items-center gap-3 border-b border-subtle/40 bg-surface px-4">
+          <div className="font-display text-sm font-semibold">{symbolCode} · Analysis</div>
+          {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
+          <div className="flex-1" />
+          <button type="button" className="btn-chip" onClick={() => setAnalysisFullscreen(false)}>
+            Exit fullscreen
+          </button>
+        </div>
+        <div className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-hidden border-x border-subtle/30">
+          <AnalysisPanel id={activeSymbolId} tf={activeTf} />
+        </div>
+      </div>
+    );
+  }
+
+  // —— Chart fullscreen ——
   if (fullscreen) {
     return (
       <div className="fixed inset-0 z-[60] flex flex-col bg-bg animate-fade-in">
@@ -135,13 +176,18 @@ export function TerminalPage() {
             Exit
           </button>
         </div>
-        <div className="min-h-0 flex-1">{chartGrid}</div>
+        <div className="flex min-h-0 flex-1">
+          {!isMobile && <DrawingToolbar symbolId={activeSymbolId} />}
+          <div className="min-h-0 flex-1">{chartGrid}</div>
+        </div>
+        <FloatingAiButton decisionKind={decision?.kind} />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg">
+    <div className="relative flex h-full min-h-0 flex-col bg-bg">
+      {/* Mobile header */}
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle/30 bg-surface px-3 py-2.5 lg:hidden">
         <div className="min-w-0">
           <div className="truncate font-display text-[15px] font-semibold tracking-tight">{symbolCode}</div>
@@ -157,8 +203,14 @@ export function TerminalPage() {
         </div>
       </header>
 
+      {/* Desktop command bar */}
       <header className="hidden h-12 shrink-0 items-center gap-3 border-b border-subtle/35 bg-surface/95 px-3 lg:flex">
         <div className="flex min-w-0 items-center gap-3">
+          {!watchlistOpen && (
+            <button type="button" className="btn-chip" title="Show watchlist" onClick={toggleWatchlist}>
+              Markets
+            </button>
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="truncate font-display text-[15px] font-semibold tracking-tight">{symbolCode}</h1>
@@ -193,9 +245,6 @@ export function TerminalPage() {
               >
                 {predictive.label}
               </span>
-              <span className="font-mono text-[10px] text-muted">
-                Ent {predictive.entry} · SL {predictive.stop}
-              </span>
             </div>
           )}
         </div>
@@ -222,6 +271,7 @@ export function TerminalPage() {
         </div>
       </header>
 
+      {/* Mobile TF strip */}
       <div className="flex shrink-0 items-center gap-2 border-b border-subtle/25 px-2 py-1.5 lg:hidden">
         {activePane && (
           <TimeframeSelector
@@ -231,33 +281,45 @@ export function TerminalPage() {
           />
         )}
         <div className="flex-1" />
-        <button
-          type="button"
-          className={cx("btn-chip shrink-0", aiPanelOpen && "btn-chip-active")}
-          onClick={() => setAiPanelOpen(!aiPanelOpen)}
-        >
-          AI
-        </button>
         {activePane && <OverlayToggles overlays={activePane.overlays} onChange={onOverlay} />}
       </div>
 
+      {/* Workspace */}
       <div className="flex min-h-0 flex-1">
-        {!isMobile && <WatchlistDrawer />}
+        {!isMobile && watchlistOpen && (
+          <>
+            <WatchlistDrawer width={watchlistWidth} />
+            <PanelResizeHandle onDrag={(dx) => setWatchlistWidth(watchlistWidth + dx)} />
+          </>
+        )}
+
+        {!isMobile && <DrawingToolbar symbolId={activeSymbolId} />}
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{chartGrid}</div>
 
-        {aiPanelOpen && activeSymbolId && (
-          <aside className="hidden w-[300px] shrink-0 flex-col border-l border-subtle/35 bg-surface/90 lg:flex">
-            <AnalysisPanel id={activeSymbolId} tf={activeTf} />
-          </aside>
+        {!isMobile && aiPanelOpen && activeSymbolId && (
+          <>
+            <PanelResizeHandle
+              onDrag={(dx) => setAiPanelWidth(aiPanelWidth - dx)}
+            />
+            <aside
+              style={{ width: aiPanelWidth }}
+              className="hidden shrink-0 flex-col border-l border-subtle/35 lg:flex animate-slide-in-right"
+            >
+              <AnalysisPanel id={activeSymbolId} tf={activeTf} />
+            </aside>
+          </>
         )}
       </div>
 
-      {aiPanelOpen && activeSymbolId && (
-        <div className="max-h-[42vh] shrink-0 overflow-auto border-t border-subtle/30 bg-surface animate-fade-in lg:hidden">
+      {/* Mobile AI sheet */}
+      {isMobile && aiPanelOpen && activeSymbolId && (
+        <div className="max-h-[48vh] shrink-0 overflow-hidden border-t border-subtle/30 bg-surface animate-slide-in-right lg:hidden">
           <AnalysisPanel id={activeSymbolId} tf={activeTf} />
         </div>
       )}
+
+      <FloatingAiButton decisionKind={decision?.kind} />
     </div>
   );
 }

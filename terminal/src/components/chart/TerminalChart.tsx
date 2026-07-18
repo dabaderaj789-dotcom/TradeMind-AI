@@ -44,6 +44,7 @@ import {
 } from "../../lib/chartTime";
 import type { OverlayId } from "../../lib/overlays";
 import { ZonesPrimitive, type PriceZone } from "./zonesPrimitive";
+import { DrawingOverlay } from "./DrawingOverlay";
 import type {
   AnalysisBar,
   Candle,
@@ -78,6 +79,7 @@ interface Props {
   candles: Candle[];
   enabled: Record<OverlayId, boolean>;
   data: OverlayData;
+  symbolId?: string;
 }
 
 function toLineData(bars: AnalysisBar[] | undefined, key: string): LineData[] {
@@ -103,7 +105,7 @@ function nearestCandleTime(candles: Candle[], iso: string): UTCTimestamp {
   return toChartTime(best.open_time);
 }
 
-export function TerminalChart({ candles, enabled, data }: Props) {
+export function TerminalChart({ candles, enabled, data, symbolId = "" }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -381,26 +383,26 @@ export function TerminalChart({ candles, enabled, data }: Props) {
     if (enabled.tradeSetups) {
       for (const a of selectAnnotations(data.annotations)) {
         const time = nearestCandleTime(bars, a.time);
-        const text = `${a.label} ${Math.round(a.confidence)}%`;
+        const conf = Math.round(a.confidence);
         if (a.side === "buy") {
           markers.push({
             time,
             position: "belowBar",
-            color: "#22c55e",
+            color: "#34ba7a",
             shape: "arrowUp",
-            size: 2,
-            text,
-            priority: markerPriority(text),
+            size: 3,
+            text: `▲ BUY ${conf}%`,
+            priority: 90,
           });
         } else if (a.side === "sell") {
           markers.push({
             time,
             position: "aboveBar",
-            color: "#ef4444",
+            color: "#e85c5c",
             shape: "arrowDown",
-            size: 2,
-            text,
-            priority: markerPriority(text),
+            size: 3,
+            text: `▼ SELL ${conf}%`,
+            priority: 90,
           });
         }
       }
@@ -584,6 +586,13 @@ export function TerminalChart({ candles, enabled, data }: Props) {
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {chartGeneration > 0 && (
+        <DrawingOverlay
+          symbolId={symbolId}
+          chart={chartRef.current}
+          series={candleRef.current}
+        />
+      )}
       {enabled.tradeSetups && data.predictive && <PlanHud plan={data.predictive} />}
       {enabled.tradeSetups && !data.predictive && actionableAnnotations.length > 0 && (
         <AnnotationLegend annotations={actionableAnnotations.slice(-2).reverse()} />
