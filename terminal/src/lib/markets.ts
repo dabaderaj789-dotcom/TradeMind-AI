@@ -53,9 +53,9 @@ export const MARKET_TREE: MarketTreeNode[] = [
     children: [
       { id: "india.indices", label: "Indices" },
       { id: "india.stocks", label: "Stocks" },
-      { id: "india.futures", label: "Futures & Options" },
-      { id: "india.sector", label: "Sector Indices" },
-      { id: "india.etfs", label: "ETFs" },
+      { id: "india.futures", label: "F&O" },
+      { id: "india.sector", label: "Sector" },
+      { id: "india.etfs", label: "ETF" },
     ],
   },
   {

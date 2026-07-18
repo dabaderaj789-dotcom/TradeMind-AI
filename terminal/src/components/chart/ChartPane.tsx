@@ -74,7 +74,13 @@ export function ChartPane({
     symbolId || null,
     tf,
     "market_structure",
-    overlays.marketStructure || overlays.bos,
+    overlays.bos ||
+      overlays.choch ||
+      overlays.hh ||
+      overlays.hl ||
+      overlays.lh ||
+      overlays.ll ||
+      overlays.marketStructure,
   );
   const { decision, annotations, predictive } = useDecision(symbolId || null, tf);
 
@@ -123,6 +129,9 @@ export function ChartPane({
       annotations,
       predictive,
       swings,
+      exchangeCode:
+        meta?.exchange_code ??
+        (marketCategory === "india" ? "nse" : marketCategory === "crypto" ? "binance" : null),
     }),
     [
       ema.data,
@@ -139,6 +148,8 @@ export function ChartPane({
       annotations,
       predictive,
       swings,
+      meta?.exchange_code,
+      marketCategory,
     ],
   );
 

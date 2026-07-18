@@ -6,7 +6,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Timeframe } from "../lib/endpoints";
-import { DEFAULT_OVERLAYS, type OverlayId } from "../lib/overlays";
+import { DEFAULT_OVERLAYS, normalizeOverlays, type OverlayId } from "../lib/overlays";
 
 export type LayoutId = "1" | "2v" | "2h" | "4" | "6" | "8";
 
@@ -130,7 +130,7 @@ export const useWorkspace = create<WorkspaceState>()(
     }),
     {
       name: "trademind.workspace",
-      version: 2,
+      version: 3,
       partialize: (s) => ({
         layout: s.layout,
         panes: s.panes,
@@ -138,6 +138,21 @@ export const useWorkspace = create<WorkspaceState>()(
         aiPanelOpen: s.aiPanelOpen,
         watchlistOpen: s.watchlistOpen,
       }),
+      migrate: (persisted, fromVersion) => {
+        const p = (persisted ?? {}) as Partial<WorkspaceState>;
+        const panes = (p.panes ?? [makePane("pane-1")]).map((pane) => ({
+          ...pane,
+          overlays: normalizeOverlays(pane.overlays as Partial<Record<string, boolean>>),
+        }));
+        return {
+          ...p,
+          panes,
+          layout: p.layout ?? "1",
+          activePaneId: p.activePaneId ?? panes[0]?.id ?? "pane-1",
+          // v3: slightly more chart by default
+          aiPanelOpen: fromVersion < 3 ? (p.aiPanelOpen ?? true) : (p.aiPanelOpen ?? true),
+        } as WorkspaceState;
+      },
     },
   ),
 );

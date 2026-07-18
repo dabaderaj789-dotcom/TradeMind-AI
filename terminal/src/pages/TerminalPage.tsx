@@ -303,7 +303,7 @@ export function TerminalPage() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{chartGrid}</div>
 
         {aiPanelOpen && activeSymbolId && (
-          <aside className="v2-panel hidden w-[min(320px,28vw)] shrink-0 flex-col animate-slide-in-right lg:flex">
+          <aside className="v2-panel hidden w-[min(280px,22vw)] shrink-0 flex-col animate-slide-in-right lg:flex">
             <AnalysisPanel id={activeSymbolId} tf={activeTf} />
           </aside>
         )}

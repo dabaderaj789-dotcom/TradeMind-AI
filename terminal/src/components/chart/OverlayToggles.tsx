@@ -9,6 +9,8 @@ interface Props {
   onChange?: (id: OverlayId, on: boolean) => void;
 }
 
+const GROUPS = ["Indicators", "Levels", "Smart Money", "Structure", "Signals"] as const;
+
 export function OverlayToggles({ overlays: overlaysProp, onChange }: Props) {
   const globalOverlays = useSettings((s) => s.overlays);
   const setOverlay = useSettings((s) => s.setOverlay);
@@ -26,8 +28,7 @@ export function OverlayToggles({ overlays: overlaysProp, onChange }: Props) {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const activeCount = Object.values(overlays).filter(Boolean).length;
-  const groups = ["Indicators", "Reference", "Smart Money", "Structure"] as const;
+  const activeCount = OVERLAYS.filter((o) => overlays[o.id]).length;
 
   return (
     <div ref={ref} className="relative">
@@ -48,23 +49,27 @@ export function OverlayToggles({ overlays: overlaysProp, onChange }: Props) {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-40 mt-2 w-72 space-y-3 rounded-xl border border-subtle/40 bg-surface/95 p-3.5 shadow-pop backdrop-blur-xl animate-scale-in">
-          {groups.map((g) => (
-            <div key={g}>
-              <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-faint">{g}</div>
-              <div className="space-y-2">
-                {OVERLAYS.filter((o) => o.group === g).map((o) => (
-                  <Toggle
-                    key={o.id}
-                    checked={overlays[o.id as OverlayId]}
-                    onChange={(v) => apply(o.id as OverlayId, v)}
-                    label={o.label}
-                    dotColor={o.color}
-                  />
-                ))}
+        <div className="absolute right-0 z-40 mt-2 max-h-[min(70vh,520px)] w-72 space-y-3 overflow-y-auto rounded-xl border border-subtle/40 bg-surface/95 p-3.5 shadow-pop backdrop-blur-xl animate-scale-in">
+          {GROUPS.map((g) => {
+            const items = OVERLAYS.filter((o) => o.group === g);
+            if (!items.length) return null;
+            return (
+              <div key={g}>
+                <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-faint">{g}</div>
+                <div className="space-y-2">
+                  {items.map((o) => (
+                    <Toggle
+                      key={o.id}
+                      checked={!!overlays[o.id]}
+                      onChange={(v) => apply(o.id, v)}
+                      label={o.label}
+                      dotColor={o.color}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

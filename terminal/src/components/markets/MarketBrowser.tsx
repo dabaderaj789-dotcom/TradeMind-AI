@@ -18,6 +18,7 @@ import type { Symbol } from "../../lib/types";
 import { usePrefs } from "../../store/prefs";
 
 type Focus =
+  | { kind: "none" }
   | { kind: "root"; id: MarketId }
   | { kind: "leaf"; id: MarketLeafId }
   | { kind: "search" };
@@ -43,7 +44,7 @@ function Chevron({ open }: { open: boolean }) {
 function SearchIcon() {
   return (
     <svg
-      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
+      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
       width="16"
       height="16"
       viewBox="0 0 24 24"
@@ -57,6 +58,7 @@ function SearchIcon() {
   );
 }
 
+/** Mobile-first: roots collapsed → expand categories → tap leaf for symbols. */
 export function MarketBrowser() {
   const select = useSelectSymbol();
   const setMarketCategory = usePrefs((s) => s.setMarketCategory);
@@ -64,11 +66,9 @@ export function MarketBrowser() {
   const debounced = useDebounce(q, 180);
   const searching = debounced.trim().length > 0;
 
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    india: true,
-    crypto: true,
-  });
-  const [focus, setFocus] = useState<Focus>({ kind: "leaf", id: "india.indices" });
+  // All markets collapsed by default — no auto-expand.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [focus, setFocus] = useState<Focus>({ kind: "none" });
 
   const nseQ = useSymbolSearch("", "nse", true);
   const binanceQ = useSymbolSearch("", "binance", true);
@@ -106,23 +106,27 @@ export function MarketBrowser() {
 
   useEffect(() => {
     if (searching) setFocus({ kind: "search" });
+    else if (focus.kind === "search") setFocus({ kind: "none" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to search toggle
   }, [searching]);
+
+  const showSymbols =
+    searching || focus.kind === "leaf" || (focus.kind === "root" && !MARKET_TREE.find((n) => n.id === focus.id)?.children);
 
   const listSymbols = useMemo(() => {
     if (focus.kind === "search") return searchHits;
     if (focus.kind === "leaf") return filterByLeaf(allSymbols, focus.id);
-    // Root with no children (forex/commodities/indices) or aggregate
-    const node = MARKET_TREE.find((n) => n.id === focus.id);
-    if (!node?.children) {
+    if (focus.kind === "root") {
       return allSymbols.filter((s) => leafRoot(classifyMarketLeaf(s)) === focus.id);
     }
-    return allSymbols.filter((s) => leafRoot(classifyMarketLeaf(s)) === focus.id);
+    return [];
   }, [allSymbols, focus, searchHits]);
 
   const listTitle = useMemo(() => {
     if (focus.kind === "search") return `Search · “${debounced.trim()}”`;
     if (focus.kind === "leaf") return leafLabel(focus.id);
-    return MARKET_TREE.find((n) => n.id === focus.id)?.label ?? "Markets";
+    if (focus.kind === "root") return MARKET_TREE.find((n) => n.id === focus.id)?.label ?? "Markets";
+    return "Select a market";
   }, [focus, debounced]);
 
   const openSymbol = (s: Symbol) => {
@@ -137,12 +141,16 @@ export function MarketBrowser() {
   };
 
   const toggleRoot = (id: MarketId) => {
-    setExpanded((e) => ({ ...e, [id]: !e[id] }));
+    setExpanded((e) => {
+      const nextOpen = !e[id];
+      // Accordion: one root open at a time on mobile for less scrolling.
+      if (nextOpen) return { [id]: true };
+      return { ...e, [id]: false };
+    });
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Global search */}
       <div className="shrink-0 border-b border-subtle/60 bg-surface px-4 py-3 lg:px-6">
         <div className="relative max-w-2xl">
           <SearchIcon />
@@ -152,7 +160,6 @@ export function MarketBrowser() {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search markets — BTC, NIFTY, Reliance…"
             aria-label="Search all markets"
-            autoFocus
           />
           {q && (
             <button
@@ -164,15 +171,17 @@ export function MarketBrowser() {
             </button>
           )}
         </div>
-        <p className="mt-2 text-[11px] text-faint">
-          Search across all markets · click a symbol to open the Trading Terminal
-        </p>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Category tree */}
+        {/* Category tree — always visible on desktop; on mobile hide when showing symbols */}
         {!searching && (
-          <aside className="shrink-0 border-b border-subtle/60 lg:w-[240px] lg:border-b-0 lg:border-r lg:overflow-y-auto bg-surface/40">
+          <aside
+            className={cx(
+              "shrink-0 border-b border-subtle/60 bg-surface/40 lg:w-[240px] lg:border-b-0 lg:border-r lg:overflow-y-auto",
+              showSymbols && "hidden lg:block",
+            )}
+          >
             <div className="px-2 py-2 lg:py-3">
               <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-faint">
                 Markets
@@ -192,24 +201,26 @@ export function MarketBrowser() {
                           if (hasChildren) {
                             toggleRoot(node.id);
                             if (!open) setFocus({ kind: "root", id: node.id });
+                            else setFocus({ kind: "none" });
                           } else {
                             setFocus({ kind: "root", id: node.id });
+                            setMarketCategory(node.id);
                           }
                         }}
                         className={cx(
-                          "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
+                          "flex w-full items-center gap-2 rounded-md px-2.5 py-2.5 text-left text-sm transition-colors lg:py-2",
                           rootActive && !hasChildren
                             ? "bg-brand/15 text-brand"
                             : "text-content hover:bg-elevated",
                         )}
                       >
                         {hasChildren ? <Chevron open={open} /> : <span className="w-3" />}
-                        <span className="min-w-0 flex-1 font-medium truncate">{node.label}</span>
+                        <span className="min-w-0 flex-1 truncate font-medium">{node.label}</span>
                         <span className="tabular-nums text-[10px] text-faint">{rootCount || ""}</span>
                       </button>
 
                       {hasChildren && open && (
-                        <ul className="ml-3 border-l border-subtle/50 pl-1 py-0.5 space-y-0.5">
+                        <ul className="ml-3 space-y-0.5 border-l border-subtle/50 py-0.5 pl-1">
                           {node.children!.map((child) => {
                             const active = focus.kind === "leaf" && focus.id === child.id;
                             const n = counts.get(child.id) ?? 0;
@@ -222,9 +233,9 @@ export function MarketBrowser() {
                                     setMarketCategory(node.id);
                                   }}
                                   className={cx(
-                                    "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors",
+                                    "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-[13px] transition-colors lg:py-1.5",
                                     active
-                                      ? "bg-brand/15 text-brand font-medium"
+                                      ? "bg-brand/15 font-medium text-brand"
                                       : "text-muted hover:bg-elevated hover:text-content",
                                   )}
                                 >
@@ -244,17 +255,51 @@ export function MarketBrowser() {
           </aside>
         )}
 
-        {/* Symbol list */}
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-subtle/50 px-4">
-            <div className="text-xs font-semibold text-muted truncate">{listTitle}</div>
-            <div className="text-[11px] tabular-nums text-faint">
-              {isFetching ? "…" : `${listSymbols.length} symbols`}
+        {/* Symbol list — only after leaf/root pick or search */}
+        <section
+          className={cx(
+            "flex min-h-0 min-w-0 flex-1 flex-col",
+            !showSymbols && "hidden lg:flex",
+          )}
+        >
+          <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-subtle/50 px-3 lg:px-4">
+            <div className="flex min-w-0 items-center gap-2">
+              {showSymbols && !searching && (
+                <button
+                  type="button"
+                  className="rounded-md px-1.5 py-1 text-xs text-muted hover:bg-elevated hover:text-content lg:hidden"
+                  onClick={() => {
+                    if (focus.kind === "leaf") {
+                      const root = leafRoot(focus.id);
+                      setExpanded({ [root]: true });
+                      setFocus({ kind: "root", id: root });
+                    } else {
+                      setFocus({ kind: "none" });
+                      setExpanded({});
+                    }
+                  }}
+                >
+                  ← Back
+                </button>
+              )}
+              <div className="truncate text-xs font-semibold text-muted">{listTitle}</div>
             </div>
+            {showSymbols && (
+              <div className="text-[11px] tabular-nums text-faint">
+                {isFetching ? "…" : `${listSymbols.length}`}
+              </div>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
-            {isLoading ? (
+            {!showSymbols ? (
+              <div className="hidden flex-col items-center justify-center gap-1 px-6 py-16 text-center lg:flex">
+                <div className="text-sm font-medium text-content">Pick a market</div>
+                <p className="max-w-sm text-xs text-muted">
+                  Expand a market, then choose a category to browse symbols.
+                </p>
+              </div>
+            ) : isLoading ? (
               <div className="p-8">
                 <Spinner label="Loading markets…" />
               </div>
@@ -283,11 +328,11 @@ export function MarketBrowser() {
                     <button
                       type="button"
                       onClick={() => openSymbol(s)}
-                      className="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-elevated"
+                      className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elevated lg:py-2.5"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-sm font-semibold text-content tracking-tight">
+                          <span className="text-sm font-semibold tracking-tight text-content">
                             {s.symbol_code}
                           </span>
                           <span className="text-[10px] uppercase tracking-wide text-faint">
@@ -296,9 +341,6 @@ export function MarketBrowser() {
                         </div>
                         <div className="truncate text-xs text-muted">{s.name}</div>
                       </div>
-                      <span className="shrink-0 text-[10px] text-faint opacity-0 transition-opacity group-hover:opacity-100">
-                        Open chart
-                      </span>
                     </button>
                   </li>
                 ))}

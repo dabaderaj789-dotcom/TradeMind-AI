@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Timeframe } from "../lib/endpoints";
-import { DEFAULT_OVERLAYS, type OverlayId } from "../lib/overlays";
+import { DEFAULT_OVERLAYS, normalizeOverlays, type OverlayId } from "../lib/overlays";
 
 export type ThemeMode = "dark" | "light";
 
@@ -71,14 +71,13 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "trademind.settings",
-      version: 6,
+      version: 7,
       migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
-        let overlays = { ...DEFAULT_OVERLAYS, ...(p.overlays ?? {}) };
+        let overlays = normalizeOverlays(p.overlays as Partial<Record<string, boolean>> | undefined);
         // v6: repair stale sessions that persisted all core overlays as disabled.
-        // This is a one-time UI-state migration; users can still toggle them afterward.
         if (fromVersion < 6) {
-          overlays = {
+          overlays = normalizeOverlays({
             ...overlays,
             marketStructure: true,
             sweeps: true,
@@ -87,12 +86,24 @@ export const useSettings = create<SettingsState>()(
             orderBlocks: true,
             fvg: true,
             tradeSetups: true,
-          };
+          });
+        }
+        // v7: granular levels + previous context defaults
+        if (fromVersion < 7) {
+          overlays = normalizeOverlays({
+            ...overlays,
+            support: overlays.support ?? true,
+            resistance: overlays.resistance ?? true,
+            prevSupport: true,
+            prevResistance: true,
+            prevOrderBlocks: true,
+            prevFvg: true,
+          });
         }
         return {
           ...p,
           overlays,
-          showHistoricalOverlays: p.showHistoricalOverlays ?? false,
+          showHistoricalOverlays: p.showHistoricalOverlays ?? true,
           tvCompareMode: p.tvCompareMode ?? false,
           scannerFilters: { ...DEFAULT_FILTERS, ...(p.scannerFilters ?? {}) },
         } as SettingsState;
