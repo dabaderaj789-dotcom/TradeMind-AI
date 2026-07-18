@@ -58,6 +58,15 @@ class BinanceClient:
 
         return await self._request("GET", "/api/v3/klines", params=params)
 
+    async def get_ticker_price(self, symbol: str) -> float:
+        """Last traded price from Binance spot ticker (matches TradingView Binance feed)."""
+        data = await self._request(
+            "GET",
+            "/api/v3/ticker/price",
+            params={"symbol": symbol.upper()},
+        )
+        return float(data["price"])
+
     async def ping(self) -> dict:
         return await self._request("GET", "/api/v3/ping")
 

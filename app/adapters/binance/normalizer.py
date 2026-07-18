@@ -42,6 +42,8 @@ def normalize_kline(raw: list, symbol_code: str, timeframe_code: str) -> Candle:
     """Convert Binance kline array to domain Candle."""
     open_time = datetime.fromtimestamp(raw[0] / 1000, tz=UTC)
     close_time = datetime.fromtimestamp(raw[6] / 1000, tz=UTC)
+    # Forming bars have close_time still in the future — never mark them complete.
+    is_complete = close_time <= datetime.now(UTC)
 
     return Candle(
         symbol_code=symbol_code,
@@ -55,7 +57,7 @@ def normalize_kline(raw: list, symbol_code: str, timeframe_code: str) -> Candle:
         volume=Decimal(raw[5]),
         quote_volume=Decimal(raw[7]),
         trades_count=int(raw[8]),
-        is_complete=True,
+        is_complete=is_complete,
         source="historical",
     )
 

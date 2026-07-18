@@ -174,7 +174,9 @@ class MarketDataService:
         if incremental and start_time is None:
             latest = await self._candle_repo().get_latest_open_time(symbol.id, timeframe.id)
             if latest is not None:
-                start_time = latest + timedelta(seconds=timeframe.seconds)
+                # Re-fetch from the tip open_time so the forming bar is upserted
+                # (previously started at tip+1 bar → tip froze mid-candle forever).
+                start_time = latest
             else:
                 start_time = end_time - timedelta(days=_default_lookback_days(symbol.exchange.code, timeframe.code))
 
@@ -185,10 +187,10 @@ class MarketDataService:
             start_time = start_time.replace(tzinfo=UTC)
 
         if start_time >= end_time:
-            raise AppValidationError(
-                "Invalid date range",
-                detail="start must be before end, or no new data to download",
-            )
+            # Clock/edge case: nudge start one bar back so tip can still refresh.
+            start_time = end_time - timedelta(seconds=max(timeframe.seconds, 60))
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=UTC)
 
         logger.info(
             "Downloading {} {} {} from {} to {} (incremental={})",

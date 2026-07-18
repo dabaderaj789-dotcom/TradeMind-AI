@@ -1,4 +1,9 @@
-"""Build Trading Terminal session quotes from persisted candles."""
+"""Build Trading Terminal session quotes.
+
+Crypto (Binance): current_price comes from the live spot ticker so the header
+and chart match TradingView's Binance feed. Candle tips are refreshed on read.
+India (NSE): quotes stay candle-derived and are labeled delayed / session-closed.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -50,6 +56,19 @@ class QuoteService:
     def _tf_repo(self) -> TimeframeRepository:
         return TimeframeRepository(self.session)
 
+    async def _binance_live_price(self, symbol_code: str) -> tuple[float, datetime] | None:
+        """Fetch Binance spot last price. Soft-fails to None on network errors."""
+        try:
+            from app.adapters.binance.client import BinanceClient
+
+            client = BinanceClient()
+            price = await client.get_ticker_price(symbol_code)
+            if price > 0:
+                return price, datetime.now(UTC)
+        except Exception as exc:  # noqa: BLE001 — quote path must not 500
+            logger.warning("Binance live ticker failed for {}: {}", symbol_code, exc)
+        return None
+
     async def get_quote(self, symbol_id: uuid.UUID) -> MarketQuoteResponse:
         symbol = await self._symbol_repo().get_by_id_with_relations(symbol_id)
         if symbol is None:
@@ -72,8 +91,7 @@ class QuoteService:
         today = now.date()
         last = bars_15[-1] if bars_15 else bars_1d[-1]
 
-        # Current price must be the freshest stored close across intraday TFs —
-        # not just 15m, which can lag 1m/5m/1h data by several bars.
+        # Freshest stored close across intraday TFs (fallback when live ticker unavailable).
         for tf_code in ("1m", "3m", "5m", "30m", "1h"):
             tf_fine = await self._tf_repo().get_by_code(tf_code)
             if tf_fine is None:
@@ -82,7 +100,25 @@ class QuoteService:
             if fine and _close_time_utc(fine[-1]) > _close_time_utc(last):
                 last = fine[-1]
 
-        current = _f(last.close)
+        candle_price = _f(last.close)
+        current = candle_price
+        last_updated = last.close_time if last.close_time.tzinfo else last.close_time.replace(tzinfo=UTC)
+        source = "persisted_candles"
+        reference_note = "Derived from stored candles after download"
+
+        exch = (symbol.exchange.code if symbol.exchange else "").lower()
+        mtype = (symbol.market.market_type if symbol.market else "").lower()
+        is_equity = exch in {"nse", "bse"} or mtype == "equity"
+
+        if exch == "binance":
+            live = await self._binance_live_price(symbol.symbol_code)
+            if live is not None:
+                current, last_updated = live
+                source = "binance_ticker"
+                reference_note = "Live Binance spot ticker (matches TradingView Binance)"
+        elif is_equity:
+            source = "yahoo_delayed"
+            reference_note = "Yahoo Finance delayed India feed — not exchange LIVE tape"
 
         today_bars = [
             b
@@ -105,6 +141,10 @@ class QuoteService:
             day_volume = _f(last.volume)
             vwap_bars = [last]
 
+        # Live / freshest price must expand the session high/low.
+        day_high = max(day_high, current)
+        day_low = min(day_low, current) if day_low > 0 else current
+
         prev = bars_1d[-2] if len(bars_1d) >= 2 else (bars_1d[-1] if bars_1d else last)
         prev_close = _f(prev.close)
         prev_day_high = _f(prev.high)
@@ -126,9 +166,6 @@ class QuoteService:
             cum_v += vol
         vwap = cum_pv / cum_v if cum_v > 0 else current
 
-        exch = (symbol.exchange.code if symbol.exchange else "").lower()
-        mtype = (symbol.market.market_type if symbol.market else "").lower()
-        is_equity = exch in {"nse", "bse"} or mtype == "equity"
         market_status: str = "OPEN"
         if is_equity:
             # NSE cash session: Mon–Fri 09:15–15:30 IST (UTC+5:30).
@@ -158,41 +195,57 @@ class QuoteService:
             avg_volume=round(avg_volume, 2),
             vwap=_round_price(vwap),
             market_status=market_status,  # type: ignore[arg-type]
-            last_updated=last.close_time if last.close_time.tzinfo else last.close_time.replace(tzinfo=UTC),
+            last_updated=last_updated,
             provider=provider,
-            source="persisted_candles",
-            reference_note="Derived from stored 15m/1d candles after download",
+            source=source,
+            reference_note=reference_note,
             yahoo_ticker=None,
         )
 
     async def verify_quote(self, symbol_id: uuid.UUID) -> QuoteVerifyResponse:
         quote = await self.get_quote(symbol_id)
-        # Self-consistency check against latest 15m close (no second live hop required).
         checks: list[QuoteCheck] = []
         symbol = await self._symbol_repo().get_by_id_with_relations(symbol_id)
-        tf_15 = await self._tf_repo().get_by_code("15m")
-        assert symbol is not None and tf_15 is not None
-        bars = await self._candle_repo().get_latest(symbol.id, tf_15.id, limit=5)
-        if bars:
-            ref = _f(bars[-1].close)
-            pct = abs(quote.current_price - ref) / ref if ref else 0.0
-            if pct > 0.0001:
+        assert symbol is not None
+        exch = (symbol.exchange.code if symbol.exchange else "").lower()
+        ref_provider = quote.provider
+        ref_price: float | None = None
+
+        if exch == "binance":
+            live = await self._binance_live_price(symbol.symbol_code)
+            if live is not None:
+                ref_price, _ = live
+                ref_provider = "binance_ticker"
+        else:
+            tf_15 = await self._tf_repo().get_by_code("15m")
+            if tf_15 is not None:
+                bars = await self._candle_repo().get_latest(symbol.id, tf_15.id, limit=5)
+                if bars:
+                    ref_price = _f(bars[-1].close)
+                    ref_provider = "persisted_15m"
+
+        if ref_price is not None and ref_price > 0:
+            pct = abs(quote.current_price - ref_price) / ref_price
+            # Live ticker quotes should match within 0.05%; candle-derived within 0.5%.
+            tol = 0.05 if quote.source == "binance_ticker" else 0.5
+            if pct * 100 > tol:
                 checks.append(
                     QuoteCheck(
                         field="current_price",
                         ours=quote.current_price,
-                        reference=ref,
+                        reference=ref_price,
                         pct_diff=round(pct * 100, 4),
-                        tolerance_pct=0.01,
+                        tolerance_pct=tol,
                     )
                 )
+
         return QuoteVerifyResponse(
             quote=quote,
             verification=QuoteVerificationResponse(
                 ok=len(checks) == 0,
                 mismatches=len(checks),
                 checks=checks,
-                reference_provider=quote.provider,
+                reference_provider=ref_provider,
                 compared_at=datetime.now(UTC),
             ),
         )
