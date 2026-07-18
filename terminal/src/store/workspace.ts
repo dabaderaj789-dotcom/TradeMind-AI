@@ -138,7 +138,7 @@ export const useWorkspace = create<WorkspaceState>()(
         aiPanelOpen: s.aiPanelOpen,
         watchlistOpen: s.watchlistOpen,
       }),
-      migrate: (persisted, fromVersion) => {
+      migrate: (persisted, _fromVersion) => {
         const p = (persisted ?? {}) as Partial<WorkspaceState>;
         const panes = (p.panes ?? [makePane("pane-1")]).map((pane) => ({
           ...pane,
