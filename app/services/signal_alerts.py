@@ -142,12 +142,16 @@ class SignalAlertService:
         }
 
     def _watchlist(self) -> list[dict[str, str]]:
-        raw = (self.settings.alert_watchlist or "NIFTY50:5m,BANKNIFTY:5m").strip()
+        raw = (self.settings.alert_watchlist or "NIFTY50:5m;BANKNIFTY:5m").strip()
         out: list[dict[str, str]] = []
-        for part in raw.split(","):
-            part = part.strip()
-            if not part:
-                continue
+        # Railway CLI often turns commas into spaces; accept ; , or whitespace.
+        normalized = raw.replace(",", ";")
+        parts = (
+            [p.strip() for p in normalized.split(";") if p.strip()]
+            if ";" in normalized
+            else [p.strip() for p in normalized.split() if p.strip()]
+        )
+        for part in parts:
             if ":" in part:
                 code, tf = part.split(":", 1)
             else:

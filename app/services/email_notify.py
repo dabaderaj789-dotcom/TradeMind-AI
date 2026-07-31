@@ -100,17 +100,16 @@ async def send_ntfy(
         raise EmailNotConfiguredError("ALERT_NTFY_TOPIC not set")
     base = (s.alert_ntfy_server or "https://ntfy.sh").rstrip("/")
     url = f"{base}/{topic}"
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        resp = await client.post(
-            url,
-            content=text_body.encode("utf-8"),
-            headers={
-                "Title": subject[:120],
-                "Priority": "high",
-                "Tags": "chart_with_upwards_trend,trademind",
-            },
-        )
-        resp.raise_for_status()
+    headers = {
+        "Title": subject[:120],
+        "Priority": "high",
+        "Tags": "chart_with_upwards_trend,trademind",
+        "User-Agent": "TradeMindAI/1.0",
+    }
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        resp = await client.post(url, content=text_body.encode("utf-8"), headers=headers)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
     logger.info("ntfy alert posted to {}", topic)
 
 
