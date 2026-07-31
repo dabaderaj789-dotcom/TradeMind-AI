@@ -69,6 +69,21 @@ class AdapterError(AppException):
         super().__init__(message, status_code=status_code, detail=detail)
 
 
+class StorageFullError(AppException):
+    """Raised when the database cannot accept more candle/analysis writes."""
+
+    def __init__(self, detail: str | None = None) -> None:
+        super().__init__(
+            "Database storage full — candle refresh blocked",
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            detail=detail
+            or (
+                "Postgres project size limit exceeded. "
+                "Run scripts/prune_neon_disk.py or upgrade Neon storage."
+            ),
+        )
+
+
 class SymbolNotFoundError(NotFoundError):
     """Raised when a symbol is not found on the exchange or in the database."""
 

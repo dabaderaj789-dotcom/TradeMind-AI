@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    alerts,
     analysis,
     backtest,
     calendar,
@@ -11,12 +12,14 @@ from app.api.v1.endpoints import (
     fvg,
     health,
     liquidity_sweep,
+    market_engine,
     market_structure,
     order_block,
     quotes,
     strategy,
     symbols,
     trade_setup,
+    trading,
     replay_studio,
     validation,
 )
@@ -27,6 +30,7 @@ api_v1_router.include_router(exchanges.router, tags=["Exchanges"])
 api_v1_router.include_router(symbols.router, tags=["Symbols"])
 api_v1_router.include_router(candles.router, tags=["Candles"])
 api_v1_router.include_router(quotes.router, tags=["Quotes"])
+api_v1_router.include_router(market_engine.router, tags=["Market Engine V7"])
 api_v1_router.include_router(calendar.router, tags=["Calendar"])
 api_v1_router.include_router(analysis.router, tags=["Analysis"])
 api_v1_router.include_router(market_structure.router, tags=["Market Structure"])
@@ -38,3 +42,5 @@ api_v1_router.include_router(strategy.router, tags=["Strategies"])
 api_v1_router.include_router(backtest.router, tags=["Backtesting"])
 api_v1_router.include_router(replay_studio.router, tags=["Replay Studio"])
 api_v1_router.include_router(validation.router, tags=["Validation"])
+api_v1_router.include_router(trading.router, tags=["Trading"])
+api_v1_router.include_router(alerts.router, tags=["Alerts"])

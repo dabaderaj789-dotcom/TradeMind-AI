@@ -62,3 +62,6 @@ Thumbs.db
 
 # Launcher runtime logs
 logs/
+
+# Local alert / runtime state
+data/

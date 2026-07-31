@@ -1,14 +1,20 @@
 """Bulk candle persistence with tip-refresh upserts."""
 
 import uuid
-from decimal import Decimal
 
 from loguru import logger
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import StorageFullError
 from app.domain.entities.candle import Candle
 from app.models.candle import Candle as CandleModel
+
+
+def _is_disk_full(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return "diskfull" in text or "project size limit" in text or "no space left" in text
 
 
 class CandleWriter:
@@ -34,47 +40,53 @@ class CandleWriter:
             return 0
 
         written = 0
-        for i in range(0, len(candles), self._batch_size):
-            batch = candles[i : i + self._batch_size]
-            rows = [
-                {
-                    "symbol_id": symbol_id,
-                    "timeframe_id": timeframe_id,
-                    "open_time": c.open_time,
-                    "close_time": c.close_time,
-                    "open": c.open,
-                    "high": c.high,
-                    "low": c.low,
-                    "close": c.close,
-                    "volume": c.volume,
-                    "quote_volume": c.quote_volume,
-                    "trades_count": c.trades_count,
-                    "is_complete": c.is_complete,
-                    "source": c.source,
-                }
-                for c in batch
-            ]
+        try:
+            for i in range(0, len(candles), self._batch_size):
+                batch = candles[i : i + self._batch_size]
+                rows = [
+                    {
+                        "symbol_id": symbol_id,
+                        "timeframe_id": timeframe_id,
+                        "open_time": c.open_time,
+                        "close_time": c.close_time,
+                        "open": c.open,
+                        "high": c.high,
+                        "low": c.low,
+                        "close": c.close,
+                        "volume": c.volume,
+                        "quote_volume": c.quote_volume,
+                        "trades_count": c.trades_count,
+                        "is_complete": c.is_complete,
+                        "source": c.source,
+                    }
+                    for c in batch
+                ]
 
-            stmt = insert(CandleModel).values(rows)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["symbol_id", "timeframe_id", "open_time"],
-                set_={
-                    "close_time": stmt.excluded.close_time,
-                    "open": stmt.excluded.open,
-                    "high": stmt.excluded.high,
-                    "low": stmt.excluded.low,
-                    "close": stmt.excluded.close,
-                    "volume": stmt.excluded.volume,
-                    "quote_volume": stmt.excluded.quote_volume,
-                    "trades_count": stmt.excluded.trades_count,
-                    "is_complete": stmt.excluded.is_complete,
-                    "source": stmt.excluded.source,
-                },
-            )
-            result = await self._session.execute(stmt)
-            written += result.rowcount or 0
+                stmt = insert(CandleModel).values(rows)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["symbol_id", "timeframe_id", "open_time"],
+                    set_={
+                        "close_time": stmt.excluded.close_time,
+                        "open": stmt.excluded.open,
+                        "high": stmt.excluded.high,
+                        "low": stmt.excluded.low,
+                        "close": stmt.excluded.close,
+                        "volume": stmt.excluded.volume,
+                        "quote_volume": stmt.excluded.quote_volume,
+                        "trades_count": stmt.excluded.trades_count,
+                        "is_complete": stmt.excluded.is_complete,
+                        "source": stmt.excluded.source,
+                    },
+                )
+                result = await self._session.execute(stmt)
+                written += result.rowcount or 0
 
-        await self._session.flush()
+            await self._session.flush()
+        except DBAPIError as exc:
+            if _is_disk_full(exc) or _is_disk_full(exc.orig or exc):
+                logger.error("Candle upsert blocked by database disk limit: {}", exc)
+                raise StorageFullError(detail=str(exc.orig or exc)[:300]) from exc
+            raise
         logger.info(
             "Persisted candles: attempted={}, written={}",
             len(candles),

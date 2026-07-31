@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,7 +69,39 @@ class AnalysisResultRepository(BaseRepository[AnalysisResult]):
             inserted += result.rowcount or 0
 
         await self._session.flush()
+        # Drop older plugin versions / params for this series so JSONB cache
+        # cannot refill the free-tier Neon 512 MB disk again.
+        await self.prune_stale_plugin_runs(
+            symbol_id=symbol_id,
+            timeframe_id=timeframe_id,
+            plugin_id=plugin_result.plugin_id,
+            keep_plugin_version=plugin_result.plugin_version,
+            keep_params_hash=plugin_result.params_hash,
+        )
         return inserted
+
+    async def prune_stale_plugin_runs(
+        self,
+        *,
+        symbol_id: uuid.UUID,
+        timeframe_id: int,
+        plugin_id: str,
+        keep_plugin_version: str,
+        keep_params_hash: str,
+    ) -> int:
+        """Keep only the current plugin version+params for a symbol/TF series."""
+        stmt = delete(AnalysisResult).where(
+            AnalysisResult.symbol_id == symbol_id,
+            AnalysisResult.timeframe_id == timeframe_id,
+            AnalysisResult.plugin_id == plugin_id,
+            (
+                (AnalysisResult.plugin_version != keep_plugin_version)
+                | (AnalysisResult.params_hash != keep_params_hash)
+            ),
+        )
+        result = await self._session.execute(stmt)
+        await self._session.flush()
+        return int(result.rowcount or 0)
 
     async def get_results(
         self,
@@ -98,6 +130,16 @@ class AnalysisResultRepository(BaseRepository[AnalysisResult]):
             stmt = stmt.where(AnalysisResult.open_time >= start)
         if end:
             stmt = stmt.where(AnalysisResult.open_time <= end)
+
+        # Mirror CandleRepository: when no time window, return the *newest*
+        # `limit` bars (ASC). ASC+LIMIT alone returned the oldest history and
+        # starved chart overlays (BOS/CHoCH) of recent 5m/15m events.
+        if start is None and end is None and offset == 0:
+            stmt = stmt.order_by(desc(AnalysisResult.open_time)).limit(limit)
+            result = await self._session.execute(stmt)
+            rows = list(result.scalars().all())
+            rows.reverse()
+            return rows
 
         stmt = stmt.order_by(AnalysisResult.open_time).offset(offset).limit(limit)
         result = await self._session.execute(stmt)

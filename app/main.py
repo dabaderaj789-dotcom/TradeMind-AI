@@ -18,7 +18,9 @@ from app.api.v1.router import api_v1_router
 from app.config.settings import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
-from app.database.session import close_db, init_db
+from app.database.session import close_db, get_session_factory, init_db
+from app.providers.registry import init_providers
+from app.services.signal_alerts import init_alert_service, start_alert_loop, stop_alert_loop
 
 
 @asynccontextmanager
@@ -28,15 +30,31 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     setup_logging(settings)
     init_db(settings)
     init_adapters()
+    init_providers()
     init_analysis_plugins()
     init_strategies()
+    alert_svc = init_alert_service(get_session_factory())
+    start_alert_loop(alert_svc)
     logger.info(
         "Starting {} v{} in {} mode",
         settings.app_name,
         settings.app_version,
         settings.app_env,
     )
+    logger.info(
+        "Market data providers — india={} crypto={} option_chain={}",
+        settings.market_data_india_provider,
+        settings.market_data_crypto_provider,
+        settings.market_data_option_chain_provider,
+    )
+    logger.info(
+        "Signal alerts — enabled={} email_configured={} watchlist={}",
+        settings.alerts_enabled,
+        bool(settings.alert_email_to and settings.smtp_host),
+        settings.alert_watchlist,
+    )
     yield
+    await stop_alert_loop()
     await close_db()
     logger.info("Application shutdown complete")
 

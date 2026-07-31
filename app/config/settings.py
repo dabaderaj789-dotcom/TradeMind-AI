@@ -73,6 +73,59 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_format: Literal["json", "text"] = Field(default="json", alias="LOG_FORMAT")
 
+    # Market-data provider abstraction (change adapters without touching chart/AI)
+    # Valid ids: yahoo_nse | binance | angel | upstox | dhan | zerodha | truedata | global_datafeeds
+    market_data_india_provider: str = Field(default="yahoo_nse", alias="MARKET_DATA_INDIA_PROVIDER")
+    market_data_crypto_provider: str = Field(default="binance", alias="MARKET_DATA_CRYPTO_PROVIDER")
+    market_data_option_chain_provider: str = Field(
+        default="yahoo_nse",
+        alias="MARKET_DATA_OPTION_CHAIN_PROVIDER",
+    )
+
+    # Broker / vendor credentials (optional until that provider is selected)
+    angel_api_key: str | None = Field(default=None, alias="ANGEL_API_KEY")
+    angel_client_code: str | None = Field(default=None, alias="ANGEL_CLIENT_CODE")
+    angel_api_secret: str | None = Field(default=None, alias="ANGEL_API_SECRET")
+    angel_password: str | None = Field(default=None, alias="ANGEL_PASSWORD")  # PIN
+    angel_totp_secret: str | None = Field(default=None, alias="ANGEL_TOTP_SECRET")
+
+    # Personal algo execution — PAPER by default; live requires dual opt-in
+    trading_mode: Literal["paper", "live"] = Field(default="paper", alias="TRADING_MODE")
+    trading_live_enabled: bool = Field(default=False, alias="TRADING_LIVE_ENABLED")
+    trading_kill_switch: bool = Field(default=False, alias="TRADING_KILL_SWITCH")
+    trading_max_qty: int = Field(default=50, alias="TRADING_MAX_QTY")
+    trading_max_orders_per_day: int = Field(default=20, alias="TRADING_MAX_ORDERS_PER_DAY")
+
+    # Email signal alerts (no Angel required — SMTP to your inbox)
+    alerts_enabled: bool = Field(default=False, alias="ALERTS_ENABLED")
+    alert_email_to: str | None = Field(default=None, alias="ALERT_EMAIL_TO")
+    alert_watchlist: str = Field(
+        default="NIFTY50:5m,BANKNIFTY:5m",
+        alias="ALERT_WATCHLIST",
+        description="Comma list CODE:timeframe",
+    )
+    alert_interval_sec: int = Field(default=180, alias="ALERT_INTERVAL_SEC")
+    alert_min_confidence: float = Field(default=60.0, alias="ALERT_MIN_CONFIDENCE")
+    alert_state_path: str = Field(default="data/alert_state.json", alias="ALERT_STATE_PATH")
+    smtp_host: str | None = Field(default=None, alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_user: str | None = Field(default=None, alias="SMTP_USER")
+    smtp_password: str | None = Field(default=None, alias="SMTP_PASSWORD")
+    smtp_from: str | None = Field(default=None, alias="SMTP_FROM")
+    smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
+    # Instant phone/desktop push without Gmail app password (https://ntfy.sh)
+    alert_ntfy_topic: str | None = Field(default=None, alias="ALERT_NTFY_TOPIC")
+    alert_ntfy_server: str = Field(default="https://ntfy.sh", alias="ALERT_NTFY_SERVER")
+    upstox_api_key: str | None = Field(default=None, alias="UPSTOX_API_KEY")
+    upstox_access_token: str | None = Field(default=None, alias="UPSTOX_ACCESS_TOKEN")
+    dhan_access_token: str | None = Field(default=None, alias="DHAN_ACCESS_TOKEN")
+    dhan_client_id: str | None = Field(default=None, alias="DHAN_CLIENT_ID")
+    kite_api_key: str | None = Field(default=None, alias="KITE_API_KEY")
+    kite_access_token: str | None = Field(default=None, alias="KITE_ACCESS_TOKEN")
+    truedata_username: str | None = Field(default=None, alias="TRUEDATA_USERNAME")
+    truedata_password: str | None = Field(default=None, alias="TRUEDATA_PASSWORD")
+    gfdl_api_key: str | None = Field(default=None, alias="GFDL_API_KEY")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

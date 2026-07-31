@@ -32,11 +32,15 @@ export function IconRail() {
         <RailLink to="/markets" label="Markets" icon={<IconMarkets />} />
         <RailLink to={chartTo} label="Chart" icon={<IconChart />} active={onTerminal} />
         <RailLink to="/watchlist" label="Watchlist" icon={<IconStar />} />
+        <RailLink to="/lab/options" label="Options" icon={<IconOptions />} />
+        <RailLink to="/lab/latency" label="Latency" icon={<IconLab />} />
+        <RailLink to="/lab/accuracy" label="Accuracy" icon={<IconAccuracy />} />
+        <RailLink to="/lab/alerts" label="Alerts" icon={<IconAlerts />} />
         <div className="flex-1" />
         <RailLink to="/settings" label="Settings" icon={<IconGear />} />
       </nav>
 
-      <div className="mt-2 text-[8px] font-semibold tracking-[0.2em] text-faint">V4</div>
+      <div className="mt-2 text-[8px] font-semibold tracking-[0.2em] text-faint">V7</div>
     </aside>
   );
 }
@@ -104,6 +108,39 @@ function IconStar() {
   );
 }
 
+function IconOptions() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6h16M4 12h10M4 18h7" />
+      <circle cx="18" cy="12" r="2" />
+      <circle cx="15" cy="18" r="2" />
+    </svg>
+  );
+}
+function IconLab() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 3h6M10 3v6L5 18a2 2 0 002 3h10a2 2 0 002-3l-5-9V3" />
+    </svg>
+  );
+}
+function IconAccuracy() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+    </svg>
+  );
+}
+function IconAlerts() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+      <path d="M13.7 21a2 2 0 01-3.4 0" />
+    </svg>
+  );
+}
 function IconGear() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
