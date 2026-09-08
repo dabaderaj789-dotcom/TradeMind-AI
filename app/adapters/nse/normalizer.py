@@ -5,12 +5,17 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from app.adapters.nse.bar_align import merge_candle_ohlc, snap_bar_open
 from app.domain.entities.candle import Candle
 from app.domain.value_objects.timeframe import Timeframe
 
 
 def normalize_yahoo_chart(payload: dict, timeframe: Timeframe, symbol_code: str) -> list[Candle]:
-    """Convert Yahoo v8 chart result to domain candles."""
+    """Convert Yahoo v8 chart result to domain candles.
+
+    Open times are snapped to the timeframe grid (NSE session from 09:15 IST for
+    intraday) so Yahoo's forming-tip "now" stamps do not create junk rows.
+    """
     try:
         result = payload["chart"]["result"][0]
     except (KeyError, IndexError, TypeError):
@@ -26,39 +31,59 @@ def normalize_yahoo_chart(payload: dict, timeframe: Timeframe, symbol_code: str)
     volumes = q0.get("volume") or []
 
     seconds = timeframe.seconds
-    out: list[Candle] = []
+    now = datetime.now(UTC)
+    buckets: dict[datetime, dict[str, float]] = {}
+
     for i, ts in enumerate(timestamps):
-        o = _dec(opens[i] if i < len(opens) else None)
-        h = _dec(highs[i] if i < len(highs) else None)
-        low = _dec(lows[i] if i < len(lows) else None)
-        c = _dec(closes[i] if i < len(closes) else None)
+        o = _f(opens[i] if i < len(opens) else None)
+        h = _f(highs[i] if i < len(highs) else None)
+        low = _f(lows[i] if i < len(lows) else None)
+        c = _f(closes[i] if i < len(closes) else None)
         if None in (o, h, low, c):
             continue
-        open_time = datetime.fromtimestamp(ts, tz=UTC)
+        raw_open = datetime.fromtimestamp(ts, tz=UTC)
+        open_time = snap_bar_open(raw_open, seconds, nse=True)
+        vol = _f(volumes[i] if i < len(volumes) else 0) or 0.0
+        slot = buckets.get(open_time)
+        if slot is None:
+            buckets[open_time] = {
+                "open": o,
+                "high": h,
+                "low": low,
+                "close": c,
+                "volume": vol,
+            }
+        else:
+            merge_candle_ohlc(slot, o, h, low, c, vol)
+
+    out: list[Candle] = []
+    for open_time in sorted(buckets.keys()):
+        slot = buckets[open_time]
         close_time = open_time + timedelta(seconds=seconds) - timedelta(milliseconds=1)
-        vol = _dec(volumes[i] if i < len(volumes) else 0) or Decimal("0")
+        # Forming tip is incomplete when its close is still in the future.
+        is_complete = close_time < now
         out.append(
             Candle(
                 symbol_code=symbol_code,
                 timeframe_code=timeframe.code,
                 open_time=open_time,
                 close_time=close_time,
-                open=o,
-                high=h,
-                low=low,
-                close=c,
-                volume=vol,
-                is_complete=True,
+                open=Decimal(str(slot["open"])),
+                high=Decimal(str(slot["high"])),
+                low=Decimal(str(slot["low"])),
+                close=Decimal(str(slot["close"])),
+                volume=Decimal(str(slot["volume"])),
+                is_complete=is_complete,
                 source="nse",
             )
         )
     return out
 
 
-def _dec(value: object) -> Decimal | None:
+def _f(value: object) -> float | None:
     if value is None:
         return None
     try:
-        return Decimal(str(value))
-    except Exception:
+        return float(value)
+    except (TypeError, ValueError):
         return None

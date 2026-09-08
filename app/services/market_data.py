@@ -8,6 +8,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import ExchangeAdapter
+from app.adapters.nse.bar_align import merge_candle_ohlc, snap_bar_open
 from app.adapters.registry import AdapterRegistry
 from app.core.exceptions import NotFoundError, ValidationError as AppValidationError
 from app.domain.entities.candle import Candle
@@ -174,9 +175,11 @@ class MarketDataService:
         if incremental and start_time is None:
             latest = await self._candle_repo().get_latest_open_time(symbol.id, timeframe.id)
             if latest is not None:
-                # Re-fetch from the tip open_time so the forming bar is upserted
-                # (previously started at tip+1 bar → tip froze mid-candle forever).
-                start_time = latest
+                # Snap tip (Yahoo may have stored wall-clock "now" as open_time) and
+                # re-fetch one bar earlier so the real forming bar is upserted.
+                is_nse = (symbol.exchange.code or "").lower() in {"nse", "bse"}
+                snapped = snap_bar_open(latest, timeframe.seconds, nse=is_nse)
+                start_time = snapped - timedelta(seconds=max(timeframe.seconds, 60))
             else:
                 start_time = end_time - timedelta(days=_default_lookback_days(symbol.exchange.code, timeframe.code))
 
@@ -261,8 +264,9 @@ class MarketDataService:
         timeframe = await self._timeframe_repo().get_by_code_or_raise(timeframe_code)
 
         if latest:
-            rows = await self._candle_repo().get_latest(symbol.id, timeframe.id, limit=limit)
-            total = len(rows)
+            # Pull extra rows so NSE coalesce can drop Yahoo tick-stamp junk.
+            fetch_limit = min(max(limit * 2, limit + 40), 2000)
+            rows = await self._candle_repo().get_latest(symbol.id, timeframe.id, limit=fetch_limit)
         else:
             rows = await self._candle_repo().get_candles(
                 symbol.id,
@@ -271,6 +275,15 @@ class MarketDataService:
                 end=end,
                 limit=limit,
             )
+
+        is_nse = (symbol.exchange.code or "").lower() in {"nse", "bse"}
+        if is_nse and rows:
+            rows = _coalesce_nse_rows(rows, timeframe.seconds)
+            if latest and len(rows) > limit:
+                rows = rows[-limit:]
+
+        total = len(rows)
+        if not latest:
             total = await self._candle_repo().count_candles(
                 symbol.id,
                 timeframe.id,
@@ -278,8 +291,11 @@ class MarketDataService:
                 end=end,
             )
 
-        return CandleListResponse(
-            items=[
+        now = datetime.now(UTC)
+        items: list[CandleResponse] = []
+        for c in rows:
+            close_t = c.close_time if c.close_time.tzinfo else c.close_time.replace(tzinfo=UTC)
+            items.append(
                 CandleResponse(
                     symbol_id=symbol.id,
                     symbol_code=symbol.symbol_code,
@@ -293,11 +309,13 @@ class MarketDataService:
                     volume=c.volume,
                     quote_volume=c.quote_volume,
                     trades_count=c.trades_count,
-                    is_complete=c.is_complete,
+                    is_complete=bool(c.is_complete) and close_t < now,
                     source=c.source,
                 )
-                for c in rows
-            ],
+            )
+
+        return CandleListResponse(
+            items=items,
             total=total,
             symbol_id=symbol.id,
             timeframe=timeframe.code,
@@ -439,12 +457,65 @@ def _merge_orm_bucket(bucket: list, symbol_code: str, tf: str) -> Candle:
     )
 
 
+def _coalesce_nse_rows(rows: list, tf_seconds: int) -> list:
+    """Merge Yahoo tick-stamp opens onto the NSE session grid for API reads."""
+    from types import SimpleNamespace
+
+    buckets: dict[datetime, SimpleNamespace] = {}
+    for c in rows:
+        key = snap_bar_open(c.open_time, tf_seconds, nse=True)
+        close_time = key + timedelta(seconds=tf_seconds) - timedelta(milliseconds=1)
+        prev = buckets.get(key)
+        if prev is None:
+            buckets[key] = SimpleNamespace(
+                open_time=key,
+                close_time=close_time,
+                open=c.open,
+                high=c.high,
+                low=c.low,
+                close=c.close,
+                volume=c.volume,
+                quote_volume=getattr(c, "quote_volume", None),
+                trades_count=getattr(c, "trades_count", None),
+                is_complete=bool(c.is_complete),
+                source=c.source,
+            )
+            continue
+        slot = {
+            "open": float(prev.open),
+            "high": float(prev.high),
+            "low": float(prev.low),
+            "close": float(prev.close),
+            "volume": float(prev.volume or 0),
+        }
+        merge_candle_ohlc(
+            slot,
+            float(c.open),
+            float(c.high),
+            float(c.low),
+            float(c.close),
+            float(c.volume or 0),
+        )
+        prev.high = slot["high"]
+        prev.low = slot["low"]
+        prev.close = slot["close"]
+        prev.volume = slot["volume"]
+        prev.is_complete = prev.is_complete and bool(c.is_complete)
+
+    return [buckets[k] for k in sorted(buckets.keys())]
+
+
 def _default_lookback_days(exchange_code: str, timeframe_code: str) -> int:
     """First-fill lookback — NSE needs longer windows than crypto defaults."""
-    if exchange_code.lower() == "nse":
+    code = exchange_code.lower()
+    if code == "nse":
         from app.adapters.nse.constants import NSE_LOOKBACK_DAYS
 
         return NSE_LOOKBACK_DAYS.get(timeframe_code, 90)
+    if code == "forex":
+        from app.adapters.forex.constants import FOREX_LOOKBACK_DAYS
+
+        return FOREX_LOOKBACK_DAYS.get(timeframe_code, 90)
     # Binance / default
     return {
         "1m": 3,

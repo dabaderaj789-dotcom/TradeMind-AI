@@ -120,6 +120,9 @@ def build_nse_symbols() -> list[Symbol]:
 
 def yahoo_ticker_for(symbol_code: str) -> str | None:
     code = symbol_code.upper()
+    # UI / Angel-style alias → catalog NIFTY50
+    if code in {"NIFTY", "NIFTY 50", "NIFTY50.NS"}:
+        code = "NIFTY50"
     for c, _n, yahoo, *_rest in _NSE_CATALOG:
         if c.upper() == code:
             return yahoo

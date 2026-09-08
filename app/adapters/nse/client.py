@@ -15,6 +15,7 @@ from urllib.parse import quote
 import httpx
 from loguru import logger
 
+from app.adapters.nse.bar_align import merge_candle_ohlc, snap_bar_open
 from app.adapters.nse.constants import DEFAULT_TIMEOUT, INTERVAL_MAP, YAHOO_CHART_HOSTS
 from app.core.exceptions import AdapterError, RateLimitError
 
@@ -29,6 +30,10 @@ _last_request_monotonic = 0.0
 _min_interval_sec = 1.25
 _lock = asyncio.Lock()
 
+# Short-lived last-price cache so quote polling (≤1s) does not hammer Yahoo/NSE.
+_price_cache: dict[str, tuple[float, float, float]] = {}  # ticker → (price, epoch_s, mono)
+_PRICE_CACHE_TTL_SEC = 0.4
+
 
 class NseYahooClient:
     """HTTP client for Yahoo chart + NSE India chart fallbacks."""
@@ -38,6 +43,58 @@ class NseYahooClient:
         self._crumb: str | None = None
         self._cookies: httpx.Cookies | None = None
         self._crumb_at = 0.0
+
+    async def get_last_price(self, yahoo_ticker: str) -> tuple[float, datetime] | None:
+        """Lightweight last price for live tip painting (not full OHLC history).
+
+        Prefer NSE India chart last tick for major indices (closer to Angel One),
+        then Yahoo ``meta.regularMarketPrice``.
+        """
+        key = yahoo_ticker.upper()
+        cached = _price_cache.get(key)
+        if cached is not None:
+            price, epoch_s, mono = cached
+            if (time.monotonic() - mono) < _PRICE_CACHE_TTL_SEC and price > 0:
+                return price, datetime.fromtimestamp(epoch_s, tz=UTC)
+
+        # 1) NSE India index chart last point — often fresher than Yahoo for NIFTY.
+        if _yahoo_to_nse_index(yahoo_ticker):
+            try:
+                await self._throttle()
+                end = datetime.now(UTC)
+                start = end - timedelta(hours=8)
+                nse_payload = await self._nse_india_chart(yahoo_ticker, "1m", start, end)
+                parsed = _extract_yahoo_last_price(nse_payload)
+                if parsed is not None:
+                    price, ts = parsed
+                    # NSE series has no meta time — stamp now for latency math.
+                    ts = datetime.now(UTC)
+                    _price_cache[key] = (price, ts.timestamp(), time.monotonic())
+                    return price, ts
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("NSE India last price failed for {}: {}", yahoo_ticker, exc)
+
+        # 2) Yahoo chart meta — single request, no long retry ladder.
+        try:
+            await self._throttle()
+            end = datetime.now(UTC)
+            start = end - timedelta(hours=6)
+            params = {
+                "interval": "1m",
+                "period1": int(start.timestamp()),
+                "period2": int(end.timestamp()),
+                "includePrePost": "false",
+            }
+            payload = await self._yahoo_request(yahoo_ticker, params)
+            parsed = _extract_yahoo_last_price(payload)
+            if parsed is not None:
+                price, ts = parsed
+                _price_cache[key] = (price, ts.timestamp(), time.monotonic())
+                return price, ts
+        except Exception as exc:  # noqa: BLE001 — quote path must soft-fail
+            logger.warning("Yahoo last price failed for {}: {}", yahoo_ticker, exc)
+
+        return None
 
     async def get_chart(
         self,
@@ -229,6 +286,49 @@ class NseYahooClient:
             _last_request_monotonic = time.monotonic()
 
 
+def _extract_yahoo_last_price(payload: dict[str, Any]) -> tuple[float, datetime] | None:
+    """Read regularMarketPrice or the last non-null close from a Yahoo-shaped chart."""
+    try:
+        result = payload["chart"]["result"][0]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+    meta = result.get("meta") or {}
+    rmp = meta.get("regularMarketPrice")
+    rmt = meta.get("regularMarketTime")
+    if rmp is not None:
+        try:
+            price = float(rmp)
+            if price > 0:
+                if rmt is not None:
+                    ts = datetime.fromtimestamp(int(rmt), tz=UTC)
+                else:
+                    ts = datetime.now(UTC)
+                return price, ts
+        except (TypeError, ValueError):
+            pass
+
+    timestamps = result.get("timestamp") or []
+    quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+    closes = quote.get("close") or []
+    for i in range(len(closes) - 1, -1, -1):
+        c = closes[i]
+        if c is None:
+            continue
+        try:
+            price = float(c)
+        except (TypeError, ValueError):
+            continue
+        if price <= 0:
+            continue
+        if i < len(timestamps):
+            ts = datetime.fromtimestamp(int(timestamps[i]), tz=UTC)
+        else:
+            ts = datetime.now(UTC)
+        return price, ts
+    return None
+
+
 def _yahoo_to_nse_index(yahoo_ticker: str) -> str | None:
     mapping = {
         "^NSEI": "NIFTY 50",
@@ -253,7 +353,7 @@ def _nse_india_to_yahoo_shape(
     if not series:
         return {"chart": {"result": []}}
 
-    # Bucket by interval seconds.
+    # Bucket onto NSE session grid (09:15 IST), not raw UTC epoch.
     seconds = {
         "1m": 60,
         "2m": 120,
@@ -278,7 +378,8 @@ def _nse_india_to_yahoo_shape(
         open_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
         if open_time < start or open_time > end:
             continue
-        bucket_ts = int(open_time.timestamp()) // seconds * seconds
+        snapped = snap_bar_open(open_time, seconds, nse=True)
+        bucket_ts = int(snapped.timestamp())
         b = buckets.get(bucket_ts)
         if b is None:
             buckets[bucket_ts] = {
@@ -289,19 +390,7 @@ def _nse_india_to_yahoo_shape(
                 "volume": 0.0,
             }
         else:
-            b["high"] = max(b["high"], price)
-            b["low"] = min(b["low"], price)
-            b["close"] = price
-
-    if not buckets:
-        return {"chart": {"result": []}}
-
-    timestamps = sorted(buckets.keys())
-    opens = [buckets[t]["open"] for t in timestamps]
-    highs = [buckets[t]["high"] for t in timestamps]
-    lows = [buckets[t]["low"] for t in timestamps]
-    closes = [buckets[t]["close"] for t in timestamps]
-    volumes = [buckets[t]["volume"] for t in timestamps]
+            merge_candle_ohlc(b, price, price, price, price, 0.0)
 
     return {
         "chart": {

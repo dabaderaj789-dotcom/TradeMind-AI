@@ -2,7 +2,8 @@
 
 Crypto (Binance): current_price comes from the live spot ticker so the header
 and chart match TradingView's Binance feed. Candle tips are refreshed on read.
-India (NSE): quotes stay candle-derived and are labeled delayed / session-closed.
+India (NSE): current_price from Yahoo/NSE last price during session so the
+forming candle moves like a broker terminal; falls back to stored candle close.
 """
 
 from __future__ import annotations
@@ -69,6 +70,25 @@ class QuoteService:
             logger.warning("Binance live ticker failed for {}: {}", symbol_code, exc)
         return None
 
+    async def _yahoo_live_price(self, symbol_code: str, *, exchange: str) -> tuple[float, datetime] | None:
+        """India / forex last price via Yahoo (NSE India fallback for indices)."""
+        try:
+            from app.adapters.nse.client import NseYahooClient
+
+            if exchange == "forex":
+                from app.adapters.forex.symbols import yahoo_ticker_for
+            else:
+                from app.adapters.nse.symbols import yahoo_ticker_for
+
+            yahoo = yahoo_ticker_for(symbol_code)
+            if not yahoo:
+                return None
+            client = NseYahooClient()
+            return await client.get_last_price(yahoo)
+        except Exception as exc:  # noqa: BLE001 — quote path must not 500
+            logger.warning("Yahoo live price failed for {} ({}): {}", symbol_code, exchange, exc)
+        return None
+
     async def get_quote(self, symbol_id: uuid.UUID) -> MarketQuoteResponse:
         symbol = await self._symbol_repo().get_by_id_with_relations(symbol_id)
         if symbol is None:
@@ -117,8 +137,34 @@ class QuoteService:
                 source = "binance_ticker"
                 reference_note = "Live Binance spot ticker (matches TradingView Binance)"
         elif is_equity:
-            source = "yahoo_delayed"
-            reference_note = "Yahoo Finance delayed India feed — not exchange LIVE tape"
+            # Session clock first so we only hit Yahoo during cash hours.
+            ist = now + timedelta(hours=5, minutes=30)
+            mins = ist.hour * 60 + ist.minute
+            in_session = ist.weekday() < 5 and (9 * 60 + 15) <= mins < (15 * 60 + 30)
+            if in_session:
+                live = await self._yahoo_live_price(symbol.symbol_code, exchange="nse")
+                if live is not None:
+                    current, _live_ts = live
+                    # Wall-clock stamp so the terminal poller never rejects ticks
+                    # against a future candle close_time.
+                    last_updated = now
+                    source = "yahoo_last"
+                    reference_note = (
+                        "Yahoo/NSE last price during session — forming candle tip "
+                        "(may lag Angel One by a few seconds)"
+                    )
+                else:
+                    source = "yahoo_delayed"
+                    reference_note = "Yahoo last price unavailable — using stored candle close"
+            else:
+                source = "yahoo_delayed"
+                reference_note = "NSE cash session closed — last stored candle close"
+        elif exch == "forex":
+            live = await self._yahoo_live_price(symbol.symbol_code, exchange="forex")
+            if live is not None:
+                current, last_updated = live[0], now
+                source = "yahoo_metals"
+                reference_note = "Yahoo COMEX gold (GC=F) last — near-spot metals feed"
 
         today_bars = [
             b
@@ -169,13 +215,20 @@ class QuoteService:
         market_status: str = "OPEN"
         if is_equity:
             # NSE cash session: Mon–Fri 09:15–15:30 IST (UTC+5:30).
+            # Close is exclusive at 15:30 — matches Angel One / exchange wall clock.
             ist = now + timedelta(hours=5, minutes=30)
-            in_session = (
-                ist.weekday() < 5
-                and (ist.hour, ist.minute) >= (9, 15)
-                and (ist.hour, ist.minute) <= (15, 30)
-            )
+            mins = ist.hour * 60 + ist.minute
+            in_session = ist.weekday() < 5 and (9 * 60 + 15) <= mins < (15 * 60 + 30)
             market_status = "OPEN" if in_session else "CLOSED"
+        elif exch in {"binance", "forex"} or mtype in {"crypto", "spot", "forex", "commodity"}:
+            market_status = "OPEN"
+        else:
+            # Unknown venue — do not claim OPEN after hours.
+            market_status = "CLOSED"
+
+        if exch == "forex" and source not in {"yahoo_metals"}:
+            source = "yahoo_metals"
+            reference_note = "Yahoo COMEX gold (GC=F) shown as XAUUSD — near-spot metals feed"
 
         provider = "binance" if exch == "binance" else exch or "database"
         return MarketQuoteResponse(
@@ -216,6 +269,11 @@ class QuoteService:
             if live is not None:
                 ref_price, _ = live
                 ref_provider = "binance_ticker"
+        elif exch in {"nse", "bse"}:
+            live = await self._yahoo_live_price(symbol.symbol_code, exchange="nse")
+            if live is not None:
+                ref_price, _ = live
+                ref_provider = "yahoo_last"
         else:
             tf_15 = await self._tf_repo().get_by_code("15m")
             if tf_15 is not None:
@@ -227,7 +285,7 @@ class QuoteService:
         if ref_price is not None and ref_price > 0:
             pct = abs(quote.current_price - ref_price) / ref_price
             # Live ticker quotes should match within 0.05%; candle-derived within 0.5%.
-            tol = 0.05 if quote.source == "binance_ticker" else 0.5
+            tol = 0.05 if quote.source in {"binance_ticker", "yahoo_last"} else 0.5
             if pct * 100 > tol:
                 checks.append(
                     QuoteCheck(
