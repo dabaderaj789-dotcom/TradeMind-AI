@@ -65,3 +65,17 @@ logs/
 
 # Local alert / runtime state
 data/
+
+.env.local.api
+.env.neon.recovery
+.neon/
+scripts/_neon_recovery_setup.py
+scripts/_extract_neon_auth_url.py
+scripts/_neon_get_cs.py
+scripts/_bootstrap_neon_core.py
+scripts/_render_set_database_url.py
+scripts/_run_alembic_008.py
+scripts/_verify_prod_market.py
+scripts/_wait_render_health.py
+*.tsbuildinfo
+docs/cloud-verification/

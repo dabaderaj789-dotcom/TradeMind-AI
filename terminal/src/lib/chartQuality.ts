@@ -93,27 +93,36 @@ export function selectCurrentSweeps(items: LiquiditySweep[] | undefined, showHis
 
 export function selectCurrentStructure(events: StructureEvents | null | undefined, showHistorical = false) {
   if (!events) return { bos_events: [], choch_events: [] };
+  const bos = sortStructureNewestFirst(events.bos_events ?? []);
+  const choch = sortStructureNewestFirst(events.choch_events ?? []);
   if (showHistorical) {
     return {
-      bos_events: (events.bos_events ?? []).slice(0, 4),
-      choch_events: (events.choch_events ?? []).slice(0, 4),
+      bos_events: bos.slice(0, 4),
+      choch_events: choch.slice(0, 4),
     };
   }
   return {
-    bos_events: (events.bos_events ?? []).slice(0, 1),
-    choch_events: (events.choch_events ?? []).slice(0, 1),
+    bos_events: bos.slice(0, 1),
+    choch_events: choch.slice(0, 1),
   };
 }
 
-/** Current + previous BOS/CHoCH (previous drawn faded). */
+function sortStructureNewestFirst<T extends { break_time: string }>(list: T[]): T[] {
+  return [...list].sort(
+    (a, b) => new Date(b.break_time).getTime() - new Date(a.break_time).getTime(),
+  );
+}
+
+/** Current + previous BOS/CHoCH (previous drawn faded). Newest first for 5m/15m trading. */
 export function selectStructureLadder(events: StructureEvents | null | undefined) {
-  const bos = events?.bos_events ?? [];
-  const choch = events?.choch_events ?? [];
+  const bos = sortStructureNewestFirst(events?.bos_events ?? []);
+  const choch = sortStructureNewestFirst(events?.choch_events ?? []);
   return {
-    bosCurrent: bos.slice(0, 1),
-    bosPrevious: bos.slice(1, 3),
-    chochCurrent: choch.slice(0, 1),
-    chochPrevious: choch.slice(1, 3),
+    // Two freshest as “current”, next few faded — denser on active 5m sessions
+    bosCurrent: bos.slice(0, 2),
+    bosPrevious: bos.slice(2, 5),
+    chochCurrent: choch.slice(0, 2),
+    chochPrevious: choch.slice(2, 5),
   };
 }
 
@@ -141,7 +150,7 @@ export function declutterMarkers<T extends { time: unknown; text?: string; prior
 }
 
 export function markerPriority(text: string): number {
-  if (text.includes("STRONG") || text.includes("BUY") || text.includes("SELL")) return 50;
+  if (text === "B" || text === "S" || text.includes("STRONG") || text.includes("BUY") || text.includes("SELL")) return 50;
   if (text.includes("CHoCH")) return 40;
   if (text.includes("BOS")) return 35;
   if (text.includes("WAIT")) return 10;

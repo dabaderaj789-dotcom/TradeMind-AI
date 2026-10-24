@@ -31,6 +31,8 @@ class MarketQuoteResponse(BaseSchema):
     source: str
     reference_note: str | None = None
     yahoo_ticker: str | None = None
+    # Open time of the freshest stored candle used for this quote (UTC).
+    last_candle_time: datetime | None = None
 
 
 class QuoteCheck(BaseSchema):

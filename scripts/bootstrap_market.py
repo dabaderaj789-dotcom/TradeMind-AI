@@ -30,6 +30,7 @@ CORE = [
     ("binance", "BTCUSDT"),
     ("binance", "ETHUSDT"),
     ("binance", "SOLUSDT"),
+    ("forex", "XAUUSD"),
 ]
 
 # Optional NSE indices when the NSE adapter has data
@@ -173,6 +174,12 @@ def main() -> int:
 
         print("Syncing Binance symbols…")
         post(client, "/symbols/sync", {"exchange_code": "binance"})
+
+        try:
+            print("Syncing forex / metals (XAUUSD)…")
+            post(client, "/symbols/sync", {"exchange_code": "forex"})
+        except RuntimeError as exc:
+            print(f"[warn] Forex sync skipped: {exc}")
 
         try:
             print("Syncing NSE symbols (optional)…")

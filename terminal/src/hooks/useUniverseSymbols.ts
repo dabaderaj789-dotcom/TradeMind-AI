@@ -23,6 +23,7 @@ export function useUniverseSymbols() {
     })),
   });
 
+  const queriesDataKey = queries.map((q) => `${q.dataUpdatedAt}:${q.fetchStatus}`).join("|");
   const items = useMemo<UniverseSymbol[]>(() => {
     return UNIVERSE.map((u, i) => {
       const list = queries[i]?.data?.items ?? [];
@@ -40,11 +41,12 @@ export function useUniverseSymbols() {
         : null;
       return { ...u, symbol: exact, lite };
     });
-  }, [queries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by query data timestamps
+  }, [queriesDataKey]);
 
   const isLoading = queries.some((q) => q.isLoading);
   const isError = queries.every((q) => q.isError);
-  const ready = items.filter((i) => i.lite);
+  const ready = useMemo(() => items.filter((i) => i.lite), [items]);
 
   return { items, ready, isLoading, isError, refetch: () => queries.forEach((q) => void q.refetch()) };
 }

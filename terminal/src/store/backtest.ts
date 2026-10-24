@@ -43,22 +43,35 @@ export const useBacktestStore = create<BacktestState>()(
           let trade = existing ?? createTrackedTrade({ plan, decision, symbolId, symbolCode, market, timeframe });
           if (trade.completed) return s;
 
-          // Refresh confidence / institutional if still open
-          trade = {
-            ...trade,
-            confidence: plan.confidence,
-            institutional_score: decision.institutional.score,
-            strategy_name: plan.strategyName,
-            strategy_id: decision.strategyId,
-          };
-
+          const nextConf = plan.confidence;
+          const nextInst = decision.institutional?.score ?? 0;
           const eventTypes = eventsFromPlanState(plan.state, plan.hitFlags);
-          trade = applyOutcomeEvents(trade, eventTypes, plan.lastPrice);
+          const updated = applyOutcomeEvents(
+            {
+              ...trade,
+              confidence: nextConf,
+              institutional_score: nextInst,
+              strategy_name: plan.strategyName,
+              strategy_id: decision.strategyId,
+            },
+            eventTypes,
+            plan.lastPrice,
+          );
+
+          // Bail out when nothing meaningful changed — prevents React max-update-depth loops.
+          if (
+            existing &&
+            updated.confidence === trade.confidence &&
+            updated.institutional_score === trade.institutional_score &&
+            updated.status === trade.status &&
+            updated.completed === trade.completed &&
+            updated.events.length === trade.events.length
+          ) {
+            return s;
+          }
 
           const others = s.trades.filter((t) => t.id !== id);
-          // Cap journal size
-          const trades = [trade, ...others].slice(0, 500);
-          return { trades };
+          return { trades: [updated, ...others].slice(0, 500) };
         });
       },
       cancelActive: (symbolId, timeframe, price, note) => {

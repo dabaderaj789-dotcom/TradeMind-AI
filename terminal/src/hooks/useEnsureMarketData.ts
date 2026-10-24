@@ -1,5 +1,6 @@
 /**
  * Ensures candles + SMC analysis exist for a symbol/timeframe.
+ * On every symbol/timeframe open or switch: refresh quote + incremental candles.
  * Uses existing FastAPI download/execute endpoints — no engine changes.
  */
 
@@ -27,14 +28,20 @@ const inFlight = new Map<string, Promise<void>>();
 // Stale-data refreshes must not loop when the provider has nothing newer
 // (weekend equity sessions, provider lag) — enforce a per-key cooldown.
 const lastCompleted = new Map<string, number>();
-const ENSURE_COOLDOWN_MS = 5 * 60_000;
+const ENSURE_COOLDOWN_MS = 90_000;
 
-async function runEnsure(symbolId: string, timeframe: string): Promise<void> {
+async function runEnsure(
+  symbolId: string,
+  timeframe: string,
+  opts: { fullAnalysis: boolean } = { fullAnalysis: true },
+): Promise<void> {
   await endpoints.downloadCandles({
     symbol_id: symbolId,
     timeframe,
     incremental: true,
   });
+
+  if (!opts.fullAnalysis) return;
 
   await endpoints.executeAnalysis({
     symbol_id: symbolId,
@@ -77,30 +84,37 @@ export function useEnsureMarketData(
   const [status, setStatus] = useState<EnsureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const lastKey = useRef("");
+  const openedKeys = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!symbolId || !needsFill) {
-      if (!needsFill) setStatus((s) => (s === "error" ? s : "ready"));
-      return;
-    }
+    if (!symbolId) return;
 
     const key = `${symbolId}:${timeframe}`;
-    if (lastKey.current === key && (status === "downloading" || status === "analyzing")) return;
-    if (Date.now() - (lastCompleted.get(key) ?? 0) < ENSURE_COOLDOWN_MS) {
+    const firstOpen = !openedKeys.current.has(key);
+    const cool = Date.now() - (lastCompleted.get(key) ?? 0) < ENSURE_COOLDOWN_MS;
+    const shouldRun = firstOpen || (needsFill && !cool);
+
+    if (!shouldRun) {
       setStatus((s) => (s === "error" ? s : "ready"));
       return;
     }
+    if (lastKey.current === key && (status === "downloading" || status === "analyzing")) return;
     lastKey.current = key;
+    openedKeys.current.add(key);
 
     let cancelled = false;
 
     const run = async () => {
       setStatus("downloading");
       setError(null);
+      // Always pull a fresh quote when the chart opens / switches.
+      void qc.invalidateQueries({ queryKey: qk.quote(symbolId) });
       try {
         let pending = inFlight.get(key);
         if (!pending) {
-          pending = runEnsure(symbolId, timeframe).finally(() => inFlight.delete(key));
+          pending = runEnsure(symbolId, timeframe, { fullAnalysis: true }).finally(() =>
+            inFlight.delete(key),
+          );
           inFlight.set(key, pending);
         }
         setStatus("analyzing");
@@ -108,6 +122,7 @@ export function useEnsureMarketData(
         lastCompleted.set(key, Date.now());
         if (cancelled) return;
         await Promise.all([
+          qc.invalidateQueries({ queryKey: qk.quote(symbolId) }),
           qc.invalidateQueries({ queryKey: qk.candles(symbolId, timeframe) }),
           qc.invalidateQueries({ queryKey: qk.trend(symbolId, timeframe) }),
           qc.invalidateQueries({ queryKey: qk.levels(symbolId, timeframe) }),

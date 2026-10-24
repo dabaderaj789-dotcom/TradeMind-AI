@@ -35,7 +35,7 @@ export function UniverseQuoteRow({
             {item.display}
           </span>
           <span className="text-[10px] uppercase tracking-wide text-faint">
-            {item.exchange === "binance" ? "CRYPTO" : "INDIA"}
+            {item.exchange === "binance" ? "CRYPTO" : item.exchange === "forex" ? "METAL" : "INDIA"}
           </span>
         </div>
         {!compact && <div className="mt-0.5 truncate text-xs text-muted">{item.name}</div>}

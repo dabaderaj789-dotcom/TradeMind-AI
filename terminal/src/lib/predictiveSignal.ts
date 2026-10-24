@@ -164,7 +164,9 @@ export function derivePredictivePlan(opts: {
   decision?: AiDecision | null;
 }): PredictivePlan {
   const { setup, lastPrice, strategy, trend, orderBlocks = [], fvgs = [], sweeps = [], decision } = opts;
-  const bullish = setup.direction.toLowerCase().includes("bull") || setup.direction.toLowerCase().includes("long");
+  const dir = setup.direction.toLowerCase();
+  const bullish =
+    dir.includes("buy") || dir.includes("bull") || dir.includes("long");
   const direction: "buy" | "sell" = bullish ? "buy" : "sell";
 
   const entryLow = num(setup.entry_zone.low);
@@ -172,14 +174,27 @@ export function derivePredictivePlan(opts: {
   const entry = mid(entryLow, entryHigh);
   const stopLow = num(setup.stop_loss_zone.low);
   const stopHigh = num(setup.stop_loss_zone.high);
-  const stop = mid(stopLow, stopHigh);
-  const t1 = setup.target_zones[0] ? mid(num(setup.target_zones[0].low), num(setup.target_zones[0].high)) : entry;
-  const t2 = setup.target_zones[1]
+  const stop = bullish ? Math.min(stopLow, stopHigh) : Math.max(stopLow, stopHigh);
+  let t1 = setup.target_zones[0] ? mid(num(setup.target_zones[0].low), num(setup.target_zones[0].high)) : entry;
+  let t2 = setup.target_zones[1]
     ? mid(num(setup.target_zones[1].low), num(setup.target_zones[1].high))
     : null;
-  const t3 = setup.target_zones[2]
+  let t3 = setup.target_zones[2]
     ? mid(num(setup.target_zones[2].low), num(setup.target_zones[2].high))
     : null;
+
+  // Structure / volatility projection when engine targets undershoot 1:2
+  const risk = Math.abs(entry - stop);
+  if (risk > 0) {
+    const t1Dist = Math.abs(t1 - entry);
+    if (t1Dist / risk < 2.0) {
+      t1 = bullish ? entry + 2 * risk : entry - 2 * risk;
+      t2 = bullish ? entry + 3 * risk : entry - 3 * risk;
+      t3 = bullish ? entry + 4 * risk : entry - 4 * risk;
+    }
+  }
+
+  const computedRr = risk > 0 ? Math.abs(t1 - entry) / risk : setup.risk_reward;
 
   const obType = bullish ? "bullish" : "bearish";
   const ob = orderBlocks.find((o) => o.type.toLowerCase().includes(obType)) ?? null;
@@ -242,7 +257,7 @@ export function derivePredictivePlan(opts: {
     sweep,
     trend,
   });
-  const validation = validatePlan(bullish, entry, stop, t1, setup.risk_reward);
+  const validation = validatePlan(bullish, entry, stop, t1, computedRr);
 
   const contributions = [
     { label: "Plan validation", value: validation.valid ? "Passed" : "Failed", tone: validation.valid ? ("bull" as Tone) : ("warn" as Tone) },
@@ -277,7 +292,7 @@ export function derivePredictivePlan(opts: {
     target1: t1,
     target2: t2,
     target3: t3,
-    riskReward: setup.risk_reward,
+    riskReward: typeof computedRr === "number" ? computedRr : setup.risk_reward,
     strategyName,
     setupType: titleCase(setup.setup_type),
     lastPrice,

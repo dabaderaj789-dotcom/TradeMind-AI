@@ -1,3 +1,4 @@
+import { levelsFromSetup } from "./decisionLevels";
 import { confidenceLabel, directionTone, num, riskRating, smcConfidencePct, titleCase, type Tone } from "./format";
 import type {
   Candle,
@@ -102,6 +103,35 @@ export interface SignalQuality {
   historicalSimilarity: number;
 }
 
+/** Intraday Professional only — Early (B) vs Confirmed (A). */
+export type IntradaySetupLevel = "early" | "confirmed" | null;
+
+export interface IntradayDecisionMeta {
+  /** Level 1 = early discretionary; Level 2 = confirmed institutional-style. */
+  setupLevel: "early" | "confirmed";
+  /** Trade quality grade for this profile (A = confirmed, B = early). */
+  tradeGrade: "A" | "B";
+  /** 1.0 = normal size; Early uses smaller scale (e.g. 0.5). */
+  positionScale: number;
+  earlyPatterns: string[];
+  earlyScore: number;
+  lateConfirmations: string[];
+  /** Human note: why this is Early vs waiting for Confirmed. */
+  levelNote: string;
+}
+
+/** V8 Market Personality — context before BUY/SELL/WAIT. */
+export interface DecisionPersonality {
+  id: string;
+  label: string;
+  bias: "bullish" | "bearish" | "neutral";
+  strength: number;
+  confidence: number;
+  characteristics: string[];
+  preferredAction: "buy" | "sell" | "wait";
+  alternatives: Array<{ id: string; label: string; score: number }>;
+}
+
 export interface AiDecision {
   kind: DecisionKind;
   tone: Tone;
@@ -135,6 +165,10 @@ export interface AiDecision {
   rejectionReasons: string[];
   /** What must become true before a directional call is valid. */
   unlockConditions: string[];
+  /** Present when Decision Profile = Intraday Professional. */
+  intraday?: IntradayDecisionMeta;
+  /** V8 Market Personality context (Intraday). */
+  personality?: DecisionPersonality;
 }
 
 export interface ChartAnnotation {
@@ -1161,46 +1195,28 @@ export function deriveDecision(opts: {
   };
 }
 
-/** Chart markers — only paint BUY/SELL for actionable decisions. */
+/** Chart letters — B under the confirmation candle, S above it. */
 export function buildAnnotations(
   decision: AiDecision,
   _setups: TradeSetup[],
   strategyLookup: (setup: TradeSetup) => string,
 ): ChartAnnotation[] {
-  const out: ChartAnnotation[] = [];
-
-  if (!decision.actionable || !decision.setup) {
-    out.push({
-      time: decision.timestamp,
-      side: "wait",
-      label: "WAIT",
-      confidence: decision.confidence,
-      setupType: decision.setupType,
-      strategy: decision.strategyName,
-      timestamp: decision.timestamp,
-    });
-    return out;
-  }
-
   const s = decision.setup;
-  const side = decision.direction === "sell" ? "sell" : "buy";
-  out.push({
-    time: s.detected_at,
-    side,
-    label: decision.kind.includes("STRONG")
-      ? side === "buy"
-        ? "STRONG BUY"
-        : "STRONG SELL"
-      : side === "buy"
-        ? "BUY"
-        : "SELL",
-    confidence: decision.confidence,
-    setupType: titleCase(s.setup_type),
-    strategy: strategyLookup(s),
-    timestamp: s.detected_at,
-  });
+  const tone = directionTone(s?.direction ?? decision.direction);
+  const side = tone === "bull" ? "buy" : tone === "bear" ? "sell" : null;
+  if (!s || !side || !levelsFromSetup(s, side === "buy")) return [];
 
-  return out;
+  return [
+    {
+      time: s.detected_at,
+      side,
+      label: side === "buy" ? "B" : "S",
+      confidence: decision.confidence,
+      setupType: titleCase(s.setup_type),
+      strategy: strategyLookup(s),
+      timestamp: s.detected_at,
+    },
+  ];
 }
 
 export function annotationCaption(a: ChartAnnotation): string {

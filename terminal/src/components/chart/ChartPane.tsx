@@ -3,11 +3,11 @@
  * Same data hooks; new chrome only.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { OverlayToggles } from "./OverlayToggles";
-import { PaneSymbolPicker } from "./PaneSymbolPicker";
 import { TerminalChart, type OverlayData } from "./TerminalChart";
 import { TimeframeSelector } from "./TimeframeSelector";
+import { CardwellRsiPane } from "./CardwellRsiPane";
 import { Badge, Spinner } from "../common/primitives";
 import {
   useActiveSetups,
@@ -23,27 +23,46 @@ import {
 import { useDecision } from "../../hooks/useDecision";
 import { useEnsureMarketData } from "../../hooks/useEnsureMarketData";
 import { useLiveStream } from "../../hooks/useLiveStream";
+import { useChartGestureLock } from "../../hooks/useChartGestureLock";
 import { useSymbolMeta } from "../../hooks/useSymbolMeta";
 import type { Timeframe } from "../../lib/endpoints";
 import { cx, fmtPrice, fmtSignedPct, num } from "../../lib/format";
+import {
+  candleAlignForExchange,
+  candleCountdownSec,
+  currentBarOpenMs,
+  formatCountdown,
+  mergeLiveFormingCandle,
+  shouldAllowLiveBar,
+} from "../../lib/liveCandle";
 import { dataFreshness, resolvePrice, timeframeSeconds } from "../../lib/marketPrice";
 import type { OverlayId } from "../../lib/overlays";
+import { computeCardwellRsi } from "../../lib/cardwellRsi";
+import type { Candle } from "../../lib/types";
+import { classifySymbol } from "../../lib/markets";
 import { usePrefs } from "../../store/prefs";
 import { useWorkspace, type ChartPaneState } from "../../store/workspace";
+
+const EMPTY_LIVE: Candle[] = [];
 
 export function ChartPane({
   pane,
   compact = false,
   showToolbar = true,
+  replayBars,
 }: {
   pane: ChartPaneState;
   compact?: boolean;
   showToolbar?: boolean;
+  /** When set, chart shows this slice instead of live candles (replay mode). */
+  replayBars?: Candle[];
 }) {
   const activePaneId = useWorkspace((s) => s.activePaneId);
   const setActivePane = useWorkspace((s) => s.setActivePane);
   const setPaneTimeframe = useWorkspace((s) => s.setPaneTimeframe);
   const setPaneOverlay = useWorkspace((s) => s.setPaneOverlay);
+  const chartType = useWorkspace((s) => s.chartType);
+  const setSymbolSearchOpen = useWorkspace((s) => s.setSymbolSearchOpen);
   const marketCategory = usePrefs((s) => s.marketCategory);
 
   const symbolId = pane.symbolId;
@@ -51,11 +70,17 @@ export function ChartPane({
   const overlays = pane.overlays;
   const active = pane.id === activePaneId;
   const meta = useSymbolMeta(symbolId);
+  // Prefer the symbol's exchange over the sidebar market pill — wrong category
+  // was blocking NSE live tip merge (crypto default prefs).
+  const streamMarket = meta
+    ? classifySymbol(meta.symbol_code, meta.name, "", meta.exchange_code)
+    : marketCategory;
 
   useLiveStream({
     symbolId,
+    symbolCode: meta?.symbol_code,
     timeframe: tf,
-    market: marketCategory,
+    market: streamMarket,
     enabled: !!symbolId && active,
   });
 
@@ -84,16 +109,71 @@ export function ChartPane({
   );
   const { decision, annotations, predictive } = useDecision(symbolId || null, tf);
 
-  const bars = candles.data?.items ?? [];
-  const lastBar = bars.length ? bars[bars.length - 1] : null;
-  const staleMs = (timeframeSeconds(tf) * 2 + 120) * 1000;
+  const liveBars = candles.data?.items ?? EMPTY_LIVE;
+  const lastBar = liveBars.length ? liveBars[liveBars.length - 1] : null;
+  const staleMs = (timeframeSeconds(tf) * 1.25 + 45) * 1000;
+  const lastOpenMs = lastBar ? Date.parse(lastBar.open_time) : NaN;
+  const alignHint = candleAlignForExchange(meta?.exchange_code, streamMarket);
+  const expectedOpen = currentBarOpenMs(tf, Date.now(), alignHint);
+  const tipAgeMs = lastBar
+    ? Date.now() - Date.parse(lastBar.close_time || lastBar.open_time)
+    : 0;
+  // Forming tips use a future close_time — also treat missing bars vs current open as stale.
+  const gapBehind =
+    !!lastBar &&
+    Number.isFinite(lastOpenMs) &&
+    expectedOpen != null &&
+    lastOpenMs < expectedOpen - timeframeSeconds(tf) * 1000;
   const isStale =
     !!lastBar &&
     quoteQ.data?.market_status !== "CLOSED" &&
-    Date.now() - Date.parse(lastBar.close_time || lastBar.open_time) > staleMs;
+    (gapBehind || (tipAgeMs > 0 && tipAgeMs > staleMs));
   const needsFill =
-    !!symbolId && !candles.isLoading && !candles.isFetching && (bars.length === 0 || isStale);
-  const ensure = useEnsureMarketData(symbolId || null, tf, needsFill);
+    !!symbolId && !candles.isLoading && !candles.isFetching && (liveBars.length === 0 || isStale);
+  useEnsureMarketData(symbolId || null, tf, needsFill);
+
+  // Never invent demo OHLC — trading accuracy requires waiting for real API candles.
+  const candlesPending =
+    !!symbolId && liveBars.length === 0 && (candles.isLoading || candles.isFetching);
+  const candlesFailed =
+    !!symbolId && liveBars.length === 0 && !candles.isLoading && !candles.isFetching && (candles.isError || candles.isFetched);
+  const candlesErrorMsg =
+    candles.error instanceof Error
+      ? candles.error.message
+      : candles.isError
+        ? "Candle request failed"
+        : "No candles returned from API";
+
+  // Countdown clock only — tip OHLC comes from the live stream / tip bus (no 250ms candle rebuild).
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const candleAlign = candleAlignForExchange(meta?.exchange_code, streamMarket);
+  const allowNewBar = shouldAllowLiveBar({
+    market: streamMarket,
+    exchangeCode: meta?.exchange_code,
+    marketStatus: quoteQ.data?.market_status,
+    nowMs,
+  });
+
+  const bars = useMemo(() => {
+    if (replayBars?.length) return replayBars;
+    if (!liveBars.length) return EMPTY_LIVE;
+    const livePx = quoteQ.data?.current_price ?? resolvePrice(quoteQ.data ?? null, liveBars).price;
+    return mergeLiveFormingCandle(liveBars, tf, livePx, nowMs, { allowNewBar, align: candleAlign });
+  }, [replayBars, liveBars, quoteQ.data, tf, nowMs, allowNewBar, candleAlign]);
+
+  const countdownSec =
+    bars.length > 0 && allowNewBar ? candleCountdownSec(tf, nowMs, candleAlign) : null;
+  const countdown = countdownSec != null ? formatCountdown(countdownSec) : null;
+
+  const cardwell = useMemo(
+    () => (overlays.cardwellRsi && bars.length ? computeCardwellRsi(bars) : null),
+    [overlays.cardwellRsi, bars],
+  );
 
   const swings = useMemo(() => {
     const items = ms.data?.items ?? [];
@@ -107,8 +187,8 @@ export function ChartPane({
   }, [ms.data]);
 
   const resolved = useMemo(
-    () => resolvePrice(quoteQ.data ?? null, candles.data?.items ?? []),
-    [quoteQ.data, candles.data],
+    () => resolvePrice(quoteQ.data ?? null, liveBars.length ? liveBars : bars),
+    [quoteQ.data, liveBars, bars],
   );
 
   const overlayData = useMemo<OverlayData>(
@@ -129,9 +209,16 @@ export function ChartPane({
       annotations,
       predictive,
       swings,
+      cardwellRsi: cardwell,
       exchangeCode:
         meta?.exchange_code ??
-        (marketCategory === "india" ? "nse" : marketCategory === "crypto" ? "binance" : null),
+        (marketCategory === "india"
+          ? "nse"
+          : marketCategory === "crypto"
+            ? "binance"
+            : marketCategory === "forex" || marketCategory === "commodities"
+              ? "forex"
+              : null),
     }),
     [
       ema.data,
@@ -148,6 +235,7 @@ export function ChartPane({
       annotations,
       predictive,
       swings,
+      cardwell,
       meta?.exchange_code,
       marketCategory,
     ],
@@ -162,9 +250,19 @@ export function ChartPane({
         100
       : 0);
   const displayPrice = resolved.price != null ? fmtPrice(resolved.price) : "—";
-  const freshness = dataFreshness(resolved.asOfMs, tf, quote?.market_status ?? null);
+  const freshness = dataFreshness(
+    resolved.asOfMs,
+    tf,
+    quote?.market_status ?? null,
+    meta?.exchange_code,
+    {
+      quoteSource: quote?.source ?? (resolved.source === "candle" ? "persisted_candles" : null),
+      candleOpenMs: Number.isFinite(lastOpenMs) ? lastOpenMs : null,
+    },
+  );
 
   const onOverlay = (id: OverlayId, on: boolean) => setPaneOverlay(pane.id, id, on);
+  const gestureRef = useChartGestureLock(true);
 
   return (
     <div
@@ -184,11 +282,14 @@ export function ChartPane({
         >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 truncate">
-              <PaneSymbolPicker
-                paneId={pane.id}
-                symbolCode={meta?.symbol_code ?? quote?.symbol_code}
-                compact={compact}
-              />
+              <button
+                type="button"
+                className="truncate font-display text-[12px] font-bold text-content hover:text-brand"
+                onClick={() => setSymbolSearchOpen(true)}
+                title="Change symbol"
+              >
+                {meta?.symbol_code ?? quote?.symbol_code ?? "—"}
+              </button>
               {!compact && (
                 <span
                   className={cx(
@@ -210,47 +311,71 @@ export function ChartPane({
                         : "text-faint",
                   )}
                 >
-                  {freshness.label}
+                  {freshness.live ? "LIVE ●" : freshness.label}
                 </span>
               )}
               {decision && <Badge tone={decision.tone}>{decision.kind}</Badge>}
             </div>
           </div>
-          <TimeframeSelector
-            value={tf}
-            onChange={(t) => setPaneTimeframe(pane.id, t as Timeframe)}
-            compact
-          />
-          <OverlayToggles overlays={overlays} onChange={onOverlay} />
+          {!compact && (
+            <>
+              <TimeframeSelector
+                value={tf}
+                onChange={(t) => setPaneTimeframe(pane.id, t as Timeframe)}
+                compact
+              />
+              <OverlayToggles overlays={overlays} onChange={onOverlay} />
+            </>
+          )}
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1 chart-stage">
+      <div
+        ref={gestureRef}
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col chart-stage chart-gesture-surface"
+      >
         {!symbolId ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted">
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
             Select a symbol from Lists or Markets
           </div>
-        ) : candles.isLoading || (ensure.isBusy && bars.length === 0) ? (
-          <Spinner
-            label={
-              ensure.status === "downloading"
-                ? "Downloading candles…"
-                : ensure.status === "analyzing"
-                  ? "Analyzing structure…"
-                  : "Loading chart…"
-            }
-          />
-        ) : ensure.status === "error" && bars.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted">
-            <p>Could not load candles for {tf}.</p>
-            <p className="text-[11px] text-faint">{ensure.error}</p>
+        ) : candlesPending && bars.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Spinner label="Loading chart…" />
+          </div>
+        ) : candlesFailed && bars.length === 0 ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted">
+            <div>Could not load candles from API.</div>
+            <div className="text-[11px] text-faint">{candlesErrorMsg}</div>
+            <button
+              type="button"
+              className="btn-chip mt-1"
+              onClick={() => void candles.refetch()}
+            >
+              Retry
+            </button>
           </div>
         ) : bars.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted">
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
             Preparing chart…
           </div>
         ) : (
-          <TerminalChart candles={bars} enabled={overlays} data={overlayData} symbolId={symbolId} />
+          <>
+            <div className="relative min-h-0 flex-1">
+              <div className="absolute inset-0">
+                <TerminalChart
+                  candles={bars}
+                  enabled={overlays}
+                  data={overlayData}
+                  symbolId={symbolId}
+                  symbolCode={meta?.symbol_code ?? quoteQ.data?.symbol_code ?? ""}
+                  timeframe={tf}
+                  countdown={countdown}
+                  chartType={chartType}
+                />
+              </div>
+            </div>
+            {overlays.cardwellRsi && cardwell && <CardwellRsiPane state={cardwell} />}
+          </>
         )}
       </div>
     </div>

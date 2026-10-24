@@ -18,11 +18,10 @@ export function TimeframeSelector({
           type="button"
           onClick={() => onChange(tf)}
           className={cx(
-            "shrink-0 font-semibold tracking-wide transition-all duration-150",
-            compact ? "rounded px-2.5 py-1 text-[11px]" : "rounded-md px-3.5 py-1.5 text-xs",
+            "shrink-0 border-b-2 px-2 py-1 text-[11px] font-semibold tracking-wide transition-colors",
             value === tf
-              ? "bg-brand/15 text-brand ring-1 ring-brand/35"
-              : "text-faint hover:bg-elevated hover:text-content",
+              ? "border-brand text-brand"
+              : "border-transparent text-faint hover:text-content",
           )}
         >
           {TIMEFRAME_LABELS[tf]}

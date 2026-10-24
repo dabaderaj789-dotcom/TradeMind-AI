@@ -28,7 +28,7 @@ export function IconRail() {
       </NavLink>
 
       <nav className="flex flex-1 flex-col items-center gap-1">
-        <RailLink to="/" end label="Dashboard" icon={<IconHome />} />
+        <RailLink to="/overview" end label="Overview" icon={<IconHome />} />
         <RailLink to="/markets" label="Markets" icon={<IconMarkets />} />
         <RailLink to={chartTo} label="Chart" icon={<IconChart />} active={onTerminal} />
         <RailLink to="/watchlist" label="Watchlist" icon={<IconStar />} />

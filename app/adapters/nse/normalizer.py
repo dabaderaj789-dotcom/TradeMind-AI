@@ -10,11 +10,20 @@ from app.domain.entities.candle import Candle
 from app.domain.value_objects.timeframe import Timeframe
 
 
-def normalize_yahoo_chart(payload: dict, timeframe: Timeframe, symbol_code: str) -> list[Candle]:
+def normalize_yahoo_chart(
+    payload: dict,
+    timeframe: Timeframe,
+    symbol_code: str,
+    *,
+    nse: bool = True,
+) -> list[Candle]:
     """Convert Yahoo v8 chart result to domain candles.
 
-    Open times are snapped to the timeframe grid (NSE session from 09:15 IST for
-    intraday) so Yahoo's forming-tip "now" stamps do not create junk rows.
+    Open times are snapped to the timeframe grid so Yahoo's forming-tip "now"
+    stamps do not create junk rows.
+
+    - ``nse=True`` (default): NSE cash session grid from 09:15 IST
+    - ``nse=False``: UTC epoch grid (forex / metals / 24h instruments)
     """
     try:
         result = payload["chart"]["result"][0]
@@ -42,7 +51,7 @@ def normalize_yahoo_chart(payload: dict, timeframe: Timeframe, symbol_code: str)
         if None in (o, h, low, c):
             continue
         raw_open = datetime.fromtimestamp(ts, tz=UTC)
-        open_time = snap_bar_open(raw_open, seconds, nse=True)
+        open_time = snap_bar_open(raw_open, seconds, nse=nse)
         vol = _f(volumes[i] if i < len(volumes) else 0) or 0.0
         slot = buckets.get(open_time)
         if slot is None:

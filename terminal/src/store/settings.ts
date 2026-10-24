@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Timeframe } from "../lib/endpoints";
 import { DEFAULT_OVERLAYS, normalizeOverlays, type OverlayId } from "../lib/overlays";
+import type { DecisionProfileId } from "../lib/decisionProfiles";
 
 export type ThemeMode = "dark" | "light";
 
@@ -22,6 +23,8 @@ interface SettingsState {
   showHistoricalOverlays: boolean;
   /** Developer: show OHLC compare panel vs provider reference feed. */
   tvCompareMode: boolean;
+  /** V6 Adaptive AI — Institutional | Intraday (scalping/swing placeholders). */
+  decisionProfile: DecisionProfileId;
   setDefaultTimeframe: (tf: Timeframe) => void;
   setOverlay: (id: OverlayId, on: boolean) => void;
   setOverlays: (overlays: Record<OverlayId, boolean>) => void;
@@ -30,6 +33,7 @@ interface SettingsState {
   setScannerFilters: (patch: Partial<ScannerFilters>) => void;
   setShowHistoricalOverlays: (on: boolean) => void;
   setTvCompareMode: (on: boolean) => void;
+  setDecisionProfile: (profile: DecisionProfileId) => void;
   reset: () => void;
 }
 
@@ -43,13 +47,14 @@ const DEFAULT_FILTERS: ScannerFilters = {
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
-      defaultTimeframe: "15m",
+      defaultTimeframe: "5m",
       overlays: { ...DEFAULT_OVERLAYS },
       theme: "dark",
       refreshInterval: 20_000,
       scannerFilters: { ...DEFAULT_FILTERS },
       showHistoricalOverlays: false,
       tvCompareMode: false,
+      decisionProfile: "intraday",
       setDefaultTimeframe: (tf) => set({ defaultTimeframe: tf }),
       setOverlay: (id, on) => set((s) => ({ overlays: { ...s.overlays, [id]: on } })),
       setOverlays: (overlays) => set({ overlays }),
@@ -58,20 +63,22 @@ export const useSettings = create<SettingsState>()(
       setScannerFilters: (patch) => set((s) => ({ scannerFilters: { ...s.scannerFilters, ...patch } })),
       setShowHistoricalOverlays: (on) => set({ showHistoricalOverlays: on }),
       setTvCompareMode: (on) => set({ tvCompareMode: on }),
+      setDecisionProfile: (decisionProfile) => set({ decisionProfile }),
       reset: () =>
         set({
-          defaultTimeframe: "15m",
+          defaultTimeframe: "5m",
           overlays: { ...DEFAULT_OVERLAYS },
           theme: "dark",
           refreshInterval: 20_000,
           scannerFilters: { ...DEFAULT_FILTERS },
           showHistoricalOverlays: false,
           tvCompareMode: false,
+          decisionProfile: "intraday",
         }),
     }),
     {
       name: "trademind.settings",
-      version: 7,
+      version: 10,
       migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
         let overlays = normalizeOverlays(p.overlays as Partial<Record<string, boolean>> | undefined);
@@ -103,8 +110,11 @@ export const useSettings = create<SettingsState>()(
         return {
           ...p,
           overlays,
+          theme: fromVersion < 10 ? "dark" : (p.theme ?? "dark"),
+          defaultTimeframe: fromVersion < 10 ? "5m" : (p.defaultTimeframe ?? "5m"),
           showHistoricalOverlays: p.showHistoricalOverlays ?? true,
           tvCompareMode: p.tvCompareMode ?? false,
+          decisionProfile: p.decisionProfile ?? "intraday",
           scannerFilters: { ...DEFAULT_FILTERS, ...(p.scannerFilters ?? {}) },
         } as SettingsState;
       },

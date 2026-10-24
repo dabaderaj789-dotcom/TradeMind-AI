@@ -87,6 +87,8 @@ export interface MarketQuote {
   source: string;
   reference_note?: string;
   yahoo_ticker?: string | null;
+  /** Open time of the freshest stored candle backing this quote (UTC ISO). */
+  last_candle_time?: string | null;
 }
 
 export interface QuoteVerification {

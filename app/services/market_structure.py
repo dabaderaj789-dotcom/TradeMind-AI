@@ -166,7 +166,8 @@ class MarketStructureService:
         bos_events: list[StructureEventResponse] = []
         choch_events: list[StructureEventResponse] = []
 
-        for row in reversed(rows):
+        # rows are newest-window ascending — walk ASC and keep the last N (most recent)
+        for row in rows:
             if row.values.get("bos"):
                 bos_events.append(_parse_event(row.values["bos"], row.open_time))
             if row.values.get("choch"):

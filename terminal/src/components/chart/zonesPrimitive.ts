@@ -1,7 +1,7 @@
 /**
  * Shaded horizontal zones (Order Blocks, Fair Value Gaps) rendered as
  * semi-transparent rectangles via the lightweight-charts primitives API.
- * Institutional style: quiet fills, hairline borders, one small caption.
+ * Broker-style zones: readable fills, bold borders, strong captions.
  */
 
 import type {
@@ -49,10 +49,10 @@ class ZonesRenderer implements ISeriesPrimitivePaneRenderer {
         ctx.fillStyle = r.fill;
         ctx.fillRect(r.x, r.y, r.w, r.h);
         ctx.strokeStyle = r.border;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.75;
         ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
         if (r.label && r.h >= 12) {
-          ctx.font = '600 9px "Sora", system-ui, sans-serif';
+          ctx.font = '700 11px "IBM Plex Sans", "Sora", system-ui, sans-serif';
           ctx.fillStyle = r.labelColor;
           ctx.textBaseline = "top";
           ctx.fillText(r.label, r.x + 6, r.y + 3);

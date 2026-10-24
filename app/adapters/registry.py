@@ -36,11 +36,13 @@ def init_adapters() -> AdapterRegistry:
     """Initialize and populate the global adapter registry."""
     global _registry
     from app.adapters.binance.adapter import BinanceAdapter
+    from app.adapters.forex.adapter import ForexAdapter
     from app.adapters.nse.adapter import NseAdapter
 
     registry = AdapterRegistry()
     registry.register(BinanceAdapter())
     registry.register(NseAdapter())
+    registry.register(ForexAdapter())
     _registry = registry
     return registry
 

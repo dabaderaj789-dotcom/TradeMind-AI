@@ -72,21 +72,27 @@ export function MarketBrowser() {
 
   const nseQ = useSymbolSearch("", "nse", true);
   const binanceQ = useSymbolSearch("", "binance", true);
-  const isLoading = nseQ.isLoading || binanceQ.isLoading;
-  const isError = nseQ.isError && binanceQ.isError;
-  const isFetching = nseQ.isFetching || binanceQ.isFetching;
+  const forexQ = useSymbolSearch("", "forex", true);
+  const isLoading = nseQ.isLoading || binanceQ.isLoading || forexQ.isLoading;
+  const isError = nseQ.isError && binanceQ.isError && forexQ.isError;
+  const isFetching = nseQ.isFetching || binanceQ.isFetching || forexQ.isFetching;
   const refetch = () => {
     void nseQ.refetch();
     void binanceQ.refetch();
+    void forexQ.refetch();
   };
 
   const allSymbols = useMemo(() => {
     const map = new Map<string, Symbol>();
-    for (const s of [...(nseQ.data?.items ?? []), ...(binanceQ.data?.items ?? [])] as Symbol[]) {
+    for (const s of [
+      ...(nseQ.data?.items ?? []),
+      ...(binanceQ.data?.items ?? []),
+      ...(forexQ.data?.items ?? []),
+    ] as Symbol[]) {
       map.set(s.id, s);
     }
     return Array.from(map.values());
-  }, [nseQ.data?.items, binanceQ.data?.items]);
+  }, [nseQ.data?.items, binanceQ.data?.items, forexQ.data?.items]);
 
   const counts = useMemo(() => {
     const map = new Map<MarketLeafId | MarketId, number>();

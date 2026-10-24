@@ -27,18 +27,18 @@ export default {
         neutral: withAlpha("--c-neutral"),
       },
       fontFamily: {
-        sans: ["Sora", "Segoe UI", "system-ui", "sans-serif"],
-        display: ["Sora", "Segoe UI", "system-ui", "sans-serif"],
-        mono: ["IBM Plex Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        sans: ['"DM Sans"', "Segoe UI", "system-ui", "sans-serif"],
+        display: ['"DM Sans"', "Segoe UI", "system-ui", "sans-serif"],
+        mono: ['"IBM Plex Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
       },
       borderRadius: {
-        xl: "0.75rem",
-        "2xl": "1rem",
+        xl: "0.5rem",
+        "2xl": "0.75rem",
       },
       boxShadow: {
-        card: "0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 28px rgba(0,0,0,0.35)",
-        pop: "0 16px 48px rgba(0,0,0,0.55)",
-        glow: "0 0 0 1px rgba(94, 168, 210, 0.18), 0 0 24px rgba(94, 168, 210, 0.08)",
+        card: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        pop: "0 8px 28px rgba(15, 23, 42, 0.12)",
+        glow: "0 0 0 1px rgba(37, 99, 235, 0.2)",
       },
       keyframes: {
         "fade-in": {

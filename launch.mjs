@@ -232,11 +232,18 @@ async function bootstrapViaApi() {
   } catch (e) {
     warn(`Symbol sync: ${e.message}`);
   }
+  try {
+    await apiJson("/symbols/sync", { method: "POST", body: { exchange_code: "forex" } });
+    ok("Forex / metals synced");
+  } catch (e) {
+    warn(`Forex sync: ${e.message}`);
+  }
 
   const core = [
     ["binance", "BTCUSDT"],
     ["binance", "ETHUSDT"],
     ["binance", "SOLUSDT"],
+    ["forex", "XAUUSD"],
   ];
 
   for (const [exchange, code] of core) {

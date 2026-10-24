@@ -47,8 +47,12 @@ export function useCandles(id: string | null, tf: string) {
     queryKey: qk.candles(id ?? "", tf),
     queryFn: ({ signal }) => endpoints.candles(id!, tf, 400, signal),
     enabled: !!id,
-    staleTime: 15_000,
-    refetchInterval,
+    staleTime: 3_000,
+    // Opening / switching a chart must not reuse a prior-session cache as "fresh".
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    // Keep tip fresh — TradingView updates the open candle continuously
+    refetchInterval: refetchInterval ? Math.min(Number(refetchInterval), 8_000) : 8_000,
   });
 }
 
@@ -58,8 +62,10 @@ export function useMarketQuote(id: string | null) {
     queryKey: qk.quote(id ?? ""),
     queryFn: ({ signal }) => endpoints.quote(id!, signal),
     enabled: !!id,
-    staleTime: 10_000,
-    refetchInterval: refetchInterval || 15_000,
+    staleTime: 500,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: refetchInterval ? Math.min(Number(refetchInterval), 1_000) : 1_000,
     retry: 1,
   });
 }

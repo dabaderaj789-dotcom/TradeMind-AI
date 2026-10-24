@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { Spinner } from "./components/common/primitives";
 import { LoginPage } from "./pages/LoginPage";
 import { TerminalPage } from "./pages/TerminalPage";
+import { TerminalHomeRedirect } from "./components/layout/TerminalHomeRedirect";
 import { useThemeEffect } from "./hooks/useTheme";
 import { useAuth } from "./store/auth";
 
@@ -41,8 +42,9 @@ export default function App() {
     <ErrorBoundary label="Terminal failed to render">
       <Routes>
         <Route element={<AppShell />}>
+          <Route index element={<TerminalHomeRedirect />} />
           <Route
-            index
+            path="overview"
             element={
               <Suspense fallback={<PageFallback />}>
                 <HomePage />

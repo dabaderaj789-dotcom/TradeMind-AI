@@ -126,6 +126,11 @@ export function classifyMarketLeaf(s: SymbolClassifiable): MarketLeafId {
     return "india.stocks";
   }
 
+  // Forex / metals before crypto catch-all
+  if (exch === "forex" || marketType === "commodity" || marketType === "forex") {
+    if (FOREX_RE.test(hay) && !COMMODITY_RE.test(hay)) return "forex";
+    return "commodities";
+  }
   if (FOREX_RE.test(hay) || marketType === "forex") return "forex";
   if (COMMODITY_RE.test(hay) || marketType === "commodity") return "commodities";
 

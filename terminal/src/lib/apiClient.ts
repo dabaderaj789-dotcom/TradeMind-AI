@@ -11,14 +11,20 @@ export class ApiError extends Error {
 
 export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   let res: Response;
+  const ctrl = !signal && typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctrl ? window.setTimeout(() => ctrl.abort(), 45_000) : null;
   try {
     res = await fetch(`${BASE}${path}`, {
       headers: { "Content-Type": "application/json" },
-      signal,
+      signal: signal ?? ctrl?.signal,
     });
   } catch (err) {
-    if ((err as Error)?.name === "AbortError") throw err;
+    if ((err as Error)?.name === "AbortError") {
+      throw new ApiError(0, "Request timed out. Free API may be waking — retry in a minute.");
+    }
     throw new ApiError(0, "Cannot reach the TradeMind API. Is the backend running?");
+  } finally {
+    if (timer) window.clearTimeout(timer);
   }
   if (!res.ok) {
     let detail: unknown = res.statusText;

@@ -75,11 +75,23 @@ def build_option_strike(
     call: NormalizedOptionLeg,
     put: NormalizedOptionLeg,
 ) -> NormalizedOptionStrike:
+    """Moneyness is strike-relative for the *row*; CE/PE ITM is opposite sides of spot.
+
+    Row moneyness uses call convention for display banding:
+    - ATM when strike equals ATM
+    - For calls: ITM when strike < spot, OTM when strike > spot
+    - Put ITM/OTM is inverted at the UI/leg level; row uses call-side banding
+      so the ATM highlight stays consistent with broker terminals.
+    """
     moneyness: str = "OTM"
     if atm is not None and abs(strike - atm) < Decimal("0.000001"):
         moneyness = "ATM"
-    elif spot is not None and strike < spot:
-        moneyness = "ITM"
+    elif spot is not None:
+        # Row banding matches call ITM (strike below spot) — industry standard for chain shading
+        if strike < spot:
+            moneyness = "ITM"
+        else:
+            moneyness = "OTM"
     return NormalizedOptionStrike(
         strike=strike,
         moneyness=moneyness,  # type: ignore[arg-type]

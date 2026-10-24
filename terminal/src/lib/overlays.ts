@@ -7,6 +7,7 @@ export type OverlayId =
   | "ema"
   | "sma"
   | "vwap"
+  | "cardwellRsi"
   | "priceReferences"
   | "support"
   | "resistance"
@@ -38,6 +39,7 @@ export const OVERLAYS: OverlayMeta[] = [
   { id: "ema", label: "EMA (20)", group: "Indicators", color: "#f59e0b" },
   { id: "sma", label: "SMA (20)", group: "Indicators", color: "#38bdf8" },
   { id: "vwap", label: "VWAP", group: "Indicators", color: "#a855f7" },
+  { id: "cardwellRsi", label: "Cardwell RSI", group: "Indicators", color: "#e2e8f0" },
   { id: "priceReferences", label: "Day / Prev refs", group: "Indicators", color: "#94a3b8" },
 
   { id: "support", label: "Support", group: "Levels", color: "#34ba7a" },
@@ -66,6 +68,7 @@ export const DEFAULT_OVERLAYS: Record<OverlayId, boolean> = {
   ema: false,
   sma: false,
   vwap: false,
+  cardwellRsi: false,
   priceReferences: false,
   support: true,
   resistance: true,
@@ -106,3 +109,79 @@ export function normalizeOverlays(
   }
   return out;
 }
+
+/** Named indicator presets for the chart toolbar Templates menu. */
+export type OverlayTemplateId = "clean" | "smc" | "cardwell" | "full";
+
+export const OVERLAY_TEMPLATES: Array<{
+  id: OverlayTemplateId;
+  label: string;
+  apply: (base?: Record<OverlayId, boolean>) => Record<OverlayId, boolean>;
+}> = [
+  {
+    id: "clean",
+    label: "Clean",
+    apply: () => ({
+      ...DEFAULT_OVERLAYS,
+      ema: false,
+      sma: false,
+      vwap: false,
+      cardwellRsi: false,
+      orderBlocks: false,
+      prevOrderBlocks: false,
+      fvg: false,
+      prevFvg: false,
+      sweeps: false,
+      bos: false,
+      choch: false,
+      tradeSetups: false,
+      support: true,
+      resistance: true,
+    }),
+  },
+  {
+    id: "smc",
+    label: "SMC",
+    apply: () => ({
+      ...DEFAULT_OVERLAYS,
+      orderBlocks: true,
+      prevOrderBlocks: true,
+      fvg: true,
+      prevFvg: true,
+      sweeps: true,
+      bos: true,
+      choch: true,
+      tradeSetups: true,
+      support: true,
+      resistance: true,
+    }),
+  },
+  {
+    id: "cardwell",
+    label: "Cardwell",
+    apply: () => ({
+      ...DEFAULT_OVERLAYS,
+      cardwellRsi: true,
+      ema: false,
+      sma: false,
+      vwap: false,
+    }),
+  },
+  {
+    id: "full",
+    label: "Full desk",
+    apply: () => ({
+      ...DEFAULT_OVERLAYS,
+      ema: true,
+      vwap: true,
+      cardwellRsi: true,
+      orderBlocks: true,
+      fvg: true,
+      sweeps: true,
+      bos: true,
+      choch: true,
+      tradeSetups: true,
+    }),
+  },
+];
+

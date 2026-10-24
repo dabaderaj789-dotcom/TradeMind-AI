@@ -22,7 +22,7 @@ export interface BriefOpportunity {
 const OUTLOOK_MARKETS: { id: MarketId; label: string; exchange?: string }[] = [
   { id: "crypto", label: "Crypto", exchange: "binance" },
   { id: "india", label: "India", exchange: "nse" },
-  { id: "forex", label: "Forex" },
+  { id: "commodities", label: "Gold", exchange: "forex" },
 ];
 
 function biasFromTrends(trends: (Trend | null | undefined)[]): OutlookBias {

@@ -89,6 +89,24 @@ class QuoteService:
             logger.warning("Yahoo live price failed for {} ({}): {}", symbol_code, exchange, exc)
         return None
 
+    async def _gold_spot_price(self) -> tuple[float, datetime] | None:
+        """XAUUSD last price from Pax Gold, which tracks the Gold Spot print."""
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                response = await client.get(
+                    "https://api.binance.com/api/v3/ticker/price",
+                    params={"symbol": "PAXGUSDT"},
+                )
+                response.raise_for_status()
+                price = float(response.json()["price"])
+            if price > 0:
+                return price, datetime.now(UTC)
+        except Exception as exc:  # noqa: BLE001 — quote path must not 500
+            logger.warning("Gold spot price failed: {}", exc)
+        return None
+
     async def get_quote(self, symbol_id: uuid.UUID) -> MarketQuoteResponse:
         symbol = await self._symbol_repo().get_by_id_with_relations(symbol_id)
         if symbol is None:
@@ -160,11 +178,13 @@ class QuoteService:
                 source = "yahoo_delayed"
                 reference_note = "NSE cash session closed — last stored candle close"
         elif exch == "forex":
-            live = await self._yahoo_live_price(symbol.symbol_code, exchange="forex")
+            live = await self._gold_spot_price()
             if live is not None:
-                current, last_updated = live[0], now
-                source = "yahoo_metals"
-                reference_note = "Yahoo COMEX gold (GC=F) last — near-spot metals feed"
+                current, last_updated = live
+                source = "gold_spot"
+                reference_note = (
+                    "Pax Gold last price — tracks the Gold Spot / USD print"
+                )
 
         today_bars = [
             b
@@ -226,9 +246,9 @@ class QuoteService:
             # Unknown venue — do not claim OPEN after hours.
             market_status = "CLOSED"
 
-        if exch == "forex" and source not in {"yahoo_metals"}:
-            source = "yahoo_metals"
-            reference_note = "Yahoo COMEX gold (GC=F) shown as XAUUSD — near-spot metals feed"
+        if exch == "forex" and source not in {"gold_spot"}:
+            source = "gold_spot"
+            reference_note = "Gold spot from stored candles"
 
         provider = "binance" if exch == "binance" else exch or "database"
         return MarketQuoteResponse(
@@ -253,6 +273,7 @@ class QuoteService:
             source=source,
             reference_note=reference_note,
             yahoo_ticker=None,
+            last_candle_time=last.open_time if last.open_time.tzinfo else last.open_time.replace(tzinfo=UTC),
         )
 
     async def verify_quote(self, symbol_id: uuid.UUID) -> QuoteVerifyResponse:

@@ -6,7 +6,7 @@
 export interface UniverseDef {
   code: string;
   display: string;
-  exchange: "nse" | "binance";
+  exchange: "nse" | "binance" | "forex";
   name: string;
 }
 
@@ -15,6 +15,7 @@ export const UNIVERSE: UniverseDef[] = [
   { code: "BANKNIFTY", display: "BANKNIFTY", exchange: "nse", name: "Nifty Bank Index" },
   { code: "SENSEX", display: "SENSEX", exchange: "nse", name: "BSE Sensex" },
   { code: "BTCUSDT", display: "BTCUSDT", exchange: "binance", name: "Bitcoin / USDT" },
+  { code: "XAUUSD", display: "GOLD", exchange: "forex", name: "Gold / USD" },
 ];
 
 export const UNIVERSE_CODES = new Set(UNIVERSE.map((u) => u.code.toUpperCase()));

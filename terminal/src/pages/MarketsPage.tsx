@@ -13,7 +13,7 @@ export function MarketsPage() {
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-subtle/40 bg-surface/90 px-4 lg:px-6">
         <div>
           <h1 className="font-display text-base font-semibold tracking-tight text-content">Markets</h1>
-          <p className="text-[11px] text-faint">NIFTY · BANKNIFTY · SENSEX · BTCUSDT</p>
+          <p className="text-[11px] text-faint">NIFTY · BANKNIFTY · SENSEX · BTCUSDT · GOLD</p>
         </div>
         <TopBarActions />
       </header>

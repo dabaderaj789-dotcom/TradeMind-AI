@@ -21,8 +21,18 @@ services:
         value: "false"
       - key: LOG_FORMAT
         value: text
+      - key: PYTHON_VERSION
+        value: "3.12.11"
+      - key: API_V1_PREFIX
+        value: /api/v1
+      - key: MARKET_DATA_INDIA_PROVIDER
+        value: yahoo_nse
+      - key: MARKET_DATA_CRYPTO_PROVIDER
+        value: binance
+      - key: MARKET_DATA_OPTION_CHAIN_PROVIDER
+        value: yahoo_nse
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGINS
         sync: false
-        # After Vercel: https://YOUR-TERMINAL.vercel.app,https://YOUR-STUDIO.vercel.app
+        # Set in dashboard: https://terminal-ten-kappa.vercel.app
